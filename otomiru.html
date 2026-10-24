@@ -1,0 +1,1766 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>オトミル（簡易音響分析アプリ）</title>
+<style>
+:root{
+  --bg:#f3f4f6; --panel:#ffffff; --ink:#1d2430; --muted:#667085; --line:#d9dde3;
+  --accent:#2457d6; --accent-soft:#e8eefc; --rec:#d92d20;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  font-family:"Yu Gothic UI","Meiryo UI","Segoe UI","Noto Sans JP",system-ui,sans-serif;
+  font-size:14px;color:var(--ink);background:var(--bg);
+  display:flex;flex-direction:column;min-height:100vh;
+}
+header.bar{
+  display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;
+  padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);
+}
+header.bar h1{font-size:17px;margin:0 8px 0 0;font-weight:700;letter-spacing:.02em}
+.grp{display:flex;align-items:center;gap:6px}
+button,label.btn{
+  font:inherit;color:var(--ink);background:#fff;border:1px solid #c5cbd4;border-radius:6px;
+  padding:5px 12px;cursor:pointer;line-height:1.4;user-select:none;
+}
+button:hover:not(:disabled),label.btn:hover{background:#f1f4f9;border-color:#a9b2c0}
+button:disabled{opacity:.45;cursor:default}
+button.rec{color:var(--rec);border-color:#efb3ad;font-weight:600}
+button.rec.on{background:var(--rec);color:#fff;border-color:var(--rec)}
+.recinfo{display:inline-flex;align-items:center;gap:8px;font-variant-numeric:tabular-nums}
+.recinfo[hidden]{display:none}
+#lvlWrap{width:90px;height:10px;background:#e5e7eb;border-radius:5px;overflow:hidden}
+#lvl{display:block;height:100%;width:0;background:#2ca25f;transition:width .05s}
+#lvl.clip{background:var(--rec)}
+.info{color:var(--muted);font-size:12.5px;margin-left:auto}
+
+section.settings{
+  display:flex;flex-wrap:wrap;gap:8px 12px;padding:8px 16px;background:#fafbfc;border-bottom:1px solid var(--line);
+}
+fieldset{border:1px solid var(--line);border-radius:8px;margin:0;padding:4px 10px 6px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;background:#fff}
+legend{font-size:11.5px;color:var(--muted);padding:0 4px}
+fieldset label{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+select,input[type=number]{font:inherit;padding:3px 6px;border:1px solid #c5cbd4;border-radius:5px;background:#fff}
+input[type=number]{width:72px}
+input[type=range]{vertical-align:middle}
+.sw{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:2px;border:1px solid #fff;box-shadow:0 0 0 1px #bbb}
+
+#readout{
+  padding:6px 16px;background:#fff;border-bottom:1px solid var(--line);
+  font-variant-numeric:tabular-nums;min-height:52px;
+}
+#readout .line{display:flex;flex-wrap:wrap;gap:2px 16px;align-items:baseline}
+#readout .k{color:var(--muted);font-size:12px;margin-right:4px}
+#readout .sel{color:var(--accent)}
+#status{color:#b54708}
+
+#stage{flex:1;min-height:560px;display:flex;flex-direction:column;background:#fff;margin:0;position:relative;touch-action:none}
+.panel{position:relative;border-bottom:1px solid var(--line);flex:none}
+.panel canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+#p-wave{height:112px}
+#p-spec{flex:1 1 auto;min-height:260px}
+#p-pitch{height:118px}
+#p-tg{display:none}
+#p-axis{height:26px;border-bottom:0}
+#p-spec .over{cursor:crosshair}
+#p-wave .over,#p-pitch .over,#p-tg .over{cursor:crosshair}
+
+.pan{display:flex;align-items:center;gap:10px;padding:6px 16px;background:#fafbfc;border-top:1px solid var(--line)}
+.pan input[type=range]{flex:1}
+details{padding:6px 16px 14px;background:#fff;border-top:1px solid var(--line);color:#344054;line-height:1.7}
+details summary{cursor:pointer;font-weight:600;padding:4px 0}
+details ul{margin:4px 0 8px 1.2em;padding:0}
+details small{color:var(--muted)}
+.drop{position:fixed;inset:0;background:rgba(36,87,214,.12);border:3px dashed var(--accent);display:none;align-items:center;justify-content:center;font-size:22px;color:var(--accent);z-index:50;pointer-events:none}
+.drop.on{display:flex}
+
+.tab.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.view{flex:1;display:flex;flex-direction:column;min-height:0}
+.view[hidden]{display:none}
+.tgbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:6px 16px;background:#fafbfc;border-bottom:1px solid var(--line);font-size:13px}
+.tgbar label{display:inline-flex;align-items:center;gap:4px}
+.tgbar button{padding:3px 9px;font-size:13px}
+.hint{color:var(--muted);font-size:12.5px}
+.vbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 16px;background:#fafbfc;border-bottom:1px solid var(--line)}
+.vbar label{display:inline-flex;align-items:center;gap:5px}
+.vbody{display:flex;flex:1;min-height:540px;background:#fff}
+.vplot{position:relative;flex:1;min-width:0}
+.vplot canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+.vlist{width:400px;overflow:auto;border-left:1px solid var(--line);max-height:80vh}
+.vlist table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+.vlist th,.vlist td{padding:3px 6px;border-bottom:1px solid #eef0f3;text-align:right;white-space:nowrap}
+.vlist th{position:sticky;top:0;background:#f4f5f7;font-weight:600;font-size:12px;color:var(--muted)}
+.vlist td:nth-child(2),.vlist th:nth-child(2){text-align:left}
+.vlist input[type=text]{width:90px;font:inherit;padding:2px 5px;border:1px solid #c5cbd4;border-radius:4px}
+.vlist tr.hi{background:var(--accent-soft)}
+button.mini{padding:0 7px;font-size:12px}
+.vempty{padding:16px;color:var(--muted);line-height:1.7}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <h1>オトミル</h1>
+  <div class="grp">
+    <button id="tabA" class="tab on">分析</button>
+    <button id="tabV" class="tab">母音図</button>
+  </div>
+  <div class="grp">
+    <button id="btnRec" class="rec" title="マイクで録音（もう一度押すと停止）">● 録音</button>
+    <span id="recInfo" class="recinfo" hidden><span id="lvlWrap"><i id="lvl"></i></span><b id="recTime">0:00</b></span>
+  </div>
+  <div class="grp">
+    <button id="btnPlay" disabled title="選択範囲があればその範囲、なければ表示範囲を再生（Space）">▶ 再生</button>
+    <button id="btnStop" disabled>■ 停止</button>
+  </div>
+  <div class="grp">
+    <label class="btn" for="fileAudio">音声を開く</label>
+    <input type="file" id="fileAudio" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac,.webm" hidden>
+    <label class="btn" for="fileTG">TextGridを開く</label>
+    <input type="file" id="fileTG" accept=".TextGrid,.textgrid,.txt" hidden>
+    <button id="btnSave" disabled>WAV保存</button>
+  </div>
+  <div class="grp">
+    <button id="zIn" title="拡大（ホイール）">＋</button>
+    <button id="zOut" title="縮小（ホイール）">－</button>
+    <button id="zSel" disabled title="選択範囲を画面いっぱいに">選択へ</button>
+    <button id="zAll" title="全体表示（Home）">全体</button>
+    <button id="btnToVowel" disabled title="選択範囲の F1・F2 の中央値を母音図に追加">母音図へ追加</button>
+  </div>
+  <span id="fileInfo" class="info">音声を録音するか、ファイルを開いてください（ドラッグ＆ドロップも可）</span>
+</header>
+
+<section class="settings">
+  <fieldset>
+    <legend>スペクトログラム</legend>
+    <label>窓
+      <select id="optBand">
+        <option value="wide">広帯域（5 ms）</option>
+        <option value="narrow">狭帯域（30 ms）</option>
+      </select>
+    </label>
+    <label>表示上限
+      <select id="optFmax">
+        <option value="3000">3000 Hz</option>
+        <option value="4000">4000 Hz</option>
+        <option value="5000" selected>5000 Hz</option>
+        <option value="6000">6000 Hz</option>
+        <option value="8000">8000 Hz</option>
+      </select>
+    </label>
+    <label>ダイナミックレンジ
+      <input type="range" id="optRange" min="35" max="90" value="60"><output id="optRangeV">60 dB</output>
+    </label>
+  </fieldset>
+  <fieldset>
+    <legend>話者のタイプ（下の値を自動設定）</legend>
+    <select id="optSpk">
+      <option value="std">標準</option>
+      <option value="m">男性</option>
+      <option value="f">女性</option>
+      <option value="c">子ども</option>
+    </select>
+  </fieldset>
+  <fieldset>
+    <legend>ピッチ（YIN法）</legend>
+    <label>下限 <input type="number" id="optF0lo" min="30" max="400" step="5" value="75">Hz</label>
+    <label>上限 <input type="number" id="optF0hi" min="100" max="1000" step="10" value="500">Hz</label>
+  </fieldset>
+  <fieldset>
+    <legend>フォルマント（LPC・Burg法）</legend>
+    <label>上限周波数 <input type="number" id="optFc" min="3000" max="9000" step="100" value="5500">Hz</label>
+    <label>解析する数
+      <select id="optNf"><option value="4">4</option><option value="5" selected>5</option><option value="6">6</option></select>
+    </label>
+  </fieldset>
+  <fieldset>
+    <legend>表示</legend>
+    <label><input type="checkbox" id="optShowF" checked><span class="sw" style="background:#e6194b"></span><span class="sw" style="background:#f5a300"></span><span class="sw" style="background:#1fa84a"></span><span class="sw" style="background:#2b6cff"></span>フォルマント</label>
+    <label><input type="checkbox" id="optVoiced" checked>有声部のみ</label>
+    <label><input type="checkbox" id="optShowP" checked>ピッチ</label>
+    <label>境界線
+      <select id="optLines"><option value="all">全層</option><option value="off">なし</option></select>
+    </label>
+  </fieldset>
+</section>
+
+<div id="viewA" class="view">
+<div id="readout">
+  <div class="line" id="roMain"><span id="status"></span></div>
+  <div class="line sel" id="roSel"></div>
+</div>
+
+<div class="tgbar" id="tgbar">
+  <b>TextGrid</b>
+  <button id="tgNew" disabled title="いまの音声に空のTextGridを作る">新規作成</button>
+  <label><input type="checkbox" id="tgEdit" disabled>編集モード</label>
+  <button id="tgAddB" disabled title="カーソル位置に境界（点層なら点）を追加　[Enter]">境界を追加</button>
+  <button id="tgDelB" disabled title="選択した境界を削除　[Delete]">境界を削除</button>
+  <button id="tgAddI" disabled>＋区間層</button>
+  <button id="tgAddP" disabled>＋点層</button>
+  <button id="tgDelTier" disabled>層を削除</button>
+  <button id="tgUndo" disabled title="Ctrl+Z">元に戻す</button>
+  <button id="tgSave" disabled>TextGrid保存</button>
+  <span class="hint" id="tgHint"></span>
+</div>
+
+<div id="stage">
+  <div class="panel" id="p-wave" data-kind="wave"><canvas class="base"></canvas><canvas class="over"></canvas></div>
+  <div class="panel" id="p-spec" data-kind="spec"><canvas class="base"></canvas><canvas class="over"></canvas></div>
+  <div class="panel" id="p-pitch" data-kind="pitch"><canvas class="base"></canvas><canvas class="over"></canvas></div>
+  <div class="panel" id="p-tg" data-kind="tg"><canvas class="base"></canvas><canvas class="over"></canvas></div>
+  <div class="panel" id="p-axis" data-kind="axis"><canvas class="base"></canvas></div>
+</div>
+
+<div class="pan"><span style="color:var(--muted);font-size:12px">表示位置</span><input type="range" id="pan" min="0" max="1000" value="0" disabled></div>
+</div>
+
+<div id="viewV" class="view" hidden>
+  <div class="vbar">
+    <button id="vAddSel" title="分析画面で選んだ範囲の F1・F2 の中央値を追加">選択範囲を追加</button>
+    <label>TextGridの層から一括追加
+      <select id="vTier"></select>
+      <button id="vAddTier">追加</button>
+    </label>
+    <label><input type="checkbox" id="vMid" checked>区間の中央50%だけ使う</label>
+    <button id="vClear">全消去</button>
+    <button id="vCsv">CSV保存</button>
+    <span class="hint" id="vMsg"></span>
+  </div>
+  <div class="vbody">
+    <div class="vplot"><canvas id="vCanvas"></canvas></div>
+    <div class="vlist">
+      <table id="vTable">
+        <thead><tr><th></th><th>ラベル</th><th>F1</th><th>F2</th><th>F3</th><th>F0</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="vempty" id="vEmpty">点がまだありません。分析画面で範囲を選んで「母音図へ追加」を押すか、ここでTextGridの層から一括追加してください。</div>
+    </div>
+  </div>
+</div>
+
+<details>
+  <summary>使い方と注意</summary>
+  <ul>
+    <li><b>録音</b>：「● 録音」を押すとマイクの使用許可を求められます。許可して話し、もう一度押すと停止します。録音には、ノイズ抑制・自動音量調整・エコー除去をオフにした生の音声を使います。</li>
+    <li><b>操作</b>：ドラッグで範囲選択、クリックでカーソル位置の指定、ホイールで拡大縮小、Shift＋ホイール（または下のバー）で左右移動。<kbd>Space</kbd> で再生/停止、<kbd>Home</kbd> で全体表示、<kbd>Esc</kbd> で選択解除。</li>
+    <li><b>読み取り</b>：マウスを重ねると、その時刻の F0・F1〜F4・周波数が上に表示されます。範囲を選択すると、その範囲の中央値が表示されます。</li>
+    <li><b>TextGrid</b>：Praat の TextGrid（長形式・短形式、UTF-8/UTF-16/Shift_JIS）を読み込めます。区間をクリックするとその区間が選択されるので、そのまま再生できます。</li>
+    <li><b>TextGridの編集</b>：「新規作成」か読み込み後に「編集モード」をオン。層をクリックして選び、位置をクリックしてカーソルを置き、<kbd>Enter</kbd> で境界を追加します。区間をダブルクリックでラベル入力（<kbd>Tab</kbd> で次の区間へ）、境界はドラッグで移動、クリックして <kbd>Delete</kbd> で削除、<kbd>Ctrl</kbd>+<kbd>Z</kbd> で元に戻せます。「TextGrid保存」でPraat形式（UTF-8）の .TextGrid を書き出します。</li>
+    <li><b>母音図</b>：上の「母音図」タブで切り替えます。分析画面で範囲を選んで「母音図へ追加」、またはTextGridの層から一括追加すると、F1–F2 散布図に点が並びます。点をクリックするとその音が再生されます。表はCSVで保存できます。</li>
+    <li><b>フォルマントの設定</b>：自動推定は万能ではありません。上限周波数を話者に合わせて変えると結果が変わります（男性 5000 Hz 前後、女性 5500 Hz 前後、子ども 6000〜7000 Hz 前後）。値が不自然なときは、設定を変えて試してみてください。</li>
+    <li><b>Praat との違い</b>：アルゴリズムが異なるため、ピッチ・フォルマントの値は Praat と完全には一致しません。</li>
+    <li><small>推奨ブラウザ：Chrome / Edge の最新版。マイクは https:// のページ、または localhost、または手元のファイルとして開いた場合に使えます。</small></li>
+  </ul>
+</details>
+
+<div class="drop" id="drop">ここにドロップ（音声ファイル / TextGrid）</div>
+
+<!-- ============================================================
+     解析処理（DOMを使わない部分）
+     ============================================================ -->
+<script id="dsp">
+/* ---------- FFT ---------- */
+function nextPow2(n){let p=1;while(p<n)p<<=1;return p;}
+const _fftCache={};
+function fftTables(n){
+  if(_fftCache[n]) return _fftCache[n];
+  const cos=new Float64Array(n/2), sin=new Float64Array(n/2);
+  for(let i=0;i<n/2;i++){const a=-2*Math.PI*i/n;cos[i]=Math.cos(a);sin[i]=Math.sin(a);}
+  const rev=new Uint32Array(n), bits=Math.round(Math.log2(n));
+  for(let i=0;i<n;i++){let r=0,v=i;for(let b=0;b<bits;b++){r=(r<<1)|(v&1);v>>=1;}rev[i]=r;}
+  return (_fftCache[n]={cos,sin,rev});
+}
+function fft(re,im){
+  const n=re.length, T=fftTables(n), cos=T.cos, sin=T.sin, rev=T.rev;
+  for(let i=0;i<n;i++){const j=rev[i];if(j>i){let t=re[i];re[i]=re[j];re[j]=t;t=im[i];im[i]=im[j];im[j]=t;}}
+  for(let size=2;size<=n;size<<=1){
+    const half=size>>1, step=n/size;
+    for(let i=0;i<n;i+=size){
+      for(let j=0,k=0;j<half;j++,k+=step){
+        const a=i+j,b=a+half;
+        const tr=re[b]*cos[k]-im[b]*sin[k], ti=re[b]*sin[k]+im[b]*cos[k];
+        re[b]=re[a]-tr; im[b]=im[a]-ti; re[a]+=tr; im[a]+=ti;
+      }
+    }
+  }
+}
+
+/* ---------- リサンプリング（窓付きsinc） ---------- */
+function resample(x, srIn, srOut){
+  if(srIn===srOut) return x;
+  const ratio=srIn/srOut, n=Math.floor(x.length/ratio), out=new Float32Array(n);
+  const cutoff=Math.min(srIn,srOut)*0.5*0.96, fc=cutoff/srIn;
+  const hw=Math.ceil(10/(2*fc)), R=64;
+  const tab=new Float64Array(2*hw*R+2);
+  for(let i=0;i<tab.length;i++){
+    const d=i/R-hw, u=2*fc*d;
+    const s=Math.abs(u)<1e-9?1:Math.sin(Math.PI*u)/(Math.PI*u);
+    tab[i]=2*fc*s*(0.5+0.5*Math.cos(Math.PI*d/hw));
+  }
+  const L=x.length;
+  for(let j=0;j<n;j++){
+    const c=j*ratio;
+    let i0=Math.ceil(c-hw), i1=Math.floor(c+hw);
+    if(i0<0)i0=0; if(i1>L-1)i1=L-1;
+    let sum=0;
+    for(let i=i0;i<=i1;i++){
+      const pos=(i-c+hw)*R, k=Math.floor(pos), fr=pos-k;
+      sum+=x[i]*(tab[k]*(1-fr)+tab[k+1]*fr);
+    }
+    out[j]=sum;
+  }
+  return out;
+}
+
+/* ---------- スペクトログラム ---------- */
+function computeSpectrogram(x, sr, winSec, hopSec){
+  const dur=x.length/sr;
+  const N=Math.max(1,Math.floor(dur/hopSec)+1);
+  const winLen=Math.max(8,Math.round(winSec*sr));
+  const nfft=nextPow2(winLen*4), nb=nfft/2+1;
+  const w=new Float64Array(winLen);
+  for(let i=0;i<winLen;i++) w[i]=0.5-0.5*Math.cos(2*Math.PI*(i+0.5)/winLen);
+  const y=new Float32Array(x.length);
+  if(x.length) y[0]=x[0];
+  for(let i=1;i<x.length;i++) y[i]=x[i]-0.97*x[i-1];     // 高域強調
+  const db=new Float32Array(N*nb);
+  const re=new Float64Array(nfft), im=new Float64Array(nfft);
+  let mx=-Infinity;
+  for(let i=0;i<N;i++){
+    const c=Math.round(i*hopSec*sr), s0=c-(winLen>>1);
+    re.fill(0); im.fill(0);
+    for(let k=0;k<winLen;k++){const idx=s0+k; if(idx>=0&&idx<y.length) re[k]=y[idx]*w[k];}
+    fft(re,im);
+    const off=i*nb;
+    for(let k=0;k<nb;k++){
+      const d=10*Math.log10(re[k]*re[k]+im[k]*im[k]+1e-10);
+      db[off+k]=d; if(d>mx) mx=d;
+    }
+  }
+  return {N,hop:hopSec,nb,db,max:mx,sr,nfft};
+}
+
+/* ---------- ピッチ（YIN） ---------- */
+function median(a){
+  if(!a.length) return NaN;
+  const b=Array.from(a).sort((p,q)=>p-q), m=b.length>>1;
+  return b.length%2?b[m]:(b[m-1]+b[m])/2;
+}
+function computePitch(x, sr, f0lo, f0hi, step){
+  const dur=x.length/sr, T=Math.max(1,Math.floor(dur/step)+1);
+  const tauMin=Math.max(2,Math.floor(sr/f0hi)), tauMax=Math.min(Math.ceil(sr/f0lo),4000);
+  const W=tauMax, total=W+tauMax;
+  const f0=new Float32Array(T), rms=new Float64Array(T), cm=new Float32Array(T);
+  const fr=new Float64Array(total), d=new Float64Array(tauMax+2), cmnd=new Float64Array(tauMax+2);
+  let maxRms=0;
+  for(let t=0;t<T;t++){
+    const s0=Math.round(t*step*sr-total/2);
+    let e=0;
+    for(let j=0;j<total;j++){const idx=s0+j; const v=(idx>=0&&idx<x.length)?x[idx]:0; fr[j]=v; if(j<W)e+=v*v;}
+    rms[t]=Math.sqrt(e/W); if(rms[t]>maxRms) maxRms=rms[t];
+    if(e===0) continue;
+    cmnd[0]=1; let run=0;
+    for(let tau=1;tau<=tauMax;tau++){
+      let sum=0;
+      for(let j=0;j<W;j++){const df=fr[j]-fr[j+tau]; sum+=df*df;}
+      d[tau]=sum; run+=sum; cmnd[tau]=run>0?sum*tau/run:1;
+    }
+    let tau=-1;
+    for(let k=tauMin;k<=tauMax-1;k++){
+      if(cmnd[k]<0.15){ while(k+1<=tauMax-1&&cmnd[k+1]<cmnd[k]) k++; tau=k; break; }
+    }
+    if(tau<0){
+      let best=tauMin;
+      for(let k=tauMin;k<=tauMax-1;k++) if(cmnd[k]<cmnd[best]) best=k;
+      tau=best;
+    }
+    const minV=cmnd[tau];
+    let ti=tau;
+    if(tau>1&&tau<tauMax){
+      const a=cmnd[tau-1], b=cmnd[tau], c=cmnd[tau+1], den=a-2*b+c;
+      if(Math.abs(den)>1e-12) ti=tau+0.5*(a-c)/den;
+    }
+    const f=sr/ti;
+    cm[t]=minV;
+    if(minV<0.3&&f>=f0lo*0.95&&f<=f0hi*1.05) f0[t]=f;
+  }
+  // 無音ゲート
+  const gate=maxRms*0.01;
+  for(let t=0;t<T;t++) if(rms[t]<gate) f0[t]=0;
+  // オクターブ外れ値の除去（前後±2フレームの中央値との比較）
+  const f1=Float32Array.from(f0);
+  for(let t=0;t<T;t++){
+    if(!(f0[t]>0)) continue;
+    const nb=[];
+    for(let k=Math.max(0,t-2);k<=Math.min(T-1,t+2);k++) if(f0[k]>0) nb.push(f0[k]);
+    if(nb.length>=3){
+      const m=median(nb);
+      if(Math.abs(f0[t]-m)>0.2*m) f1[t]=0;
+    }
+  }
+  // 短すぎる有声区間（15 ms未満）を除去
+  const minRun=Math.max(2,Math.round(0.015/step));
+  let t=0;
+  while(t<T){
+    if(f1[t]>0){
+      let e=t; while(e<T&&f1[e]>0) e++;
+      if(e-t<minRun) for(let k=t;k<e;k++) f1[k]=0;
+      t=e;
+    } else t++;
+  }
+  let lo=Infinity,hi=-Infinity;
+  for(let i=0;i<T;i++) if(f1[i]>0){ if(f1[i]<lo)lo=f1[i]; if(f1[i]>hi)hi=f1[i]; }
+  return {step,T,f0:f1,lo:isFinite(lo)?lo:null,hi:isFinite(hi)?hi:null};
+}
+
+/* ---------- LPC（Burg法）とフォルマント ---------- */
+function burg(x, m){
+  const N=x.length, f=Float64Array.from(x), b=Float64Array.from(x);
+  let a=new Float64Array(m+1); a[0]=1;
+  for(let k=1;k<=m;k++){
+    let num=0, den=0;
+    for(let n=k;n<N;n++){num+=f[n]*b[n-1]; den+=f[n]*f[n]+b[n-1]*b[n-1];}
+    if(den<=0) break;
+    const mu=-2*num/den, na=new Float64Array(m+1);
+    for(let i=0;i<=k;i++) na[i]=a[i]+mu*(i===0?0:a[k-i]);
+    na[0]=1; na[k]=mu;
+    a=na;
+    for(let n=N-1;n>=k;n--){
+      const fn=f[n];
+      f[n]=fn+mu*b[n-1];
+      b[n]=b[n-1]+mu*fn;
+    }
+  }
+  return a;
+}
+function polyRoots(c){
+  const p=c.length-1, zr=new Float64Array(p), zi=new Float64Array(p);
+  for(let k=0;k<p;k++){const ang=2*Math.PI*k/p+0.4; const r=0.7+0.25*((k*7)%p)/p; zr[k]=r*Math.cos(ang); zi[k]=r*Math.sin(ang);}
+  for(let it=0;it<400;it++){
+    let maxd=0;
+    for(let k=0;k<p;k++){
+      let pr=c[0], pi=0;
+      for(let m=1;m<=p;m++){const tr=pr*zr[k]-pi*zi[k]+c[m]; const ti=pr*zi[k]+pi*zr[k]; pr=tr; pi=ti;}
+      let dr=1, di=0;
+      for(let j=0;j<p;j++){
+        if(j===k) continue;
+        const ar=zr[k]-zr[j], ai=zi[k]-zi[j];
+        const tr=dr*ar-di*ai; di=dr*ai+di*ar; dr=tr;
+      }
+      const den=dr*dr+di*di; if(den===0) continue;
+      const qr=(pr*dr+pi*di)/den, qi=(pi*dr-pr*di)/den;
+      zr[k]-=qr; zi[k]-=qi;
+      const dd=Math.abs(qr)+Math.abs(qi); if(dd>maxd) maxd=dd;
+    }
+    if(maxd<1e-10) break;
+  }
+  return {zr,zi};
+}
+function computeFormants(x, sr0, maxF, nForm, step){
+  const sr=Math.min(sr0,2*maxF);
+  const y0=sr===sr0?x:resample(x,sr0,sr);
+  const n=y0.length, dur=x.length/sr0;
+  const T=Math.max(1,Math.floor(dur/step)+1);
+  const pe=Math.exp(-2*Math.PI*50/sr);                  // 50 Hz から +6 dB/oct
+  const y=new Float64Array(n);
+  if(n) y[0]=y0[0];
+  for(let i=1;i<n;i++) y[i]=y0[i]-pe*y0[i-1];
+  const winLen=Math.max(16,Math.round(0.050*sr));       // ガウス窓（実効25 ms）
+  const w=new Float64Array(winLen), e12=Math.exp(-12);
+  for(let i=0;i<winLen;i++){const u=(i+0.5)/winLen-0.5; w[i]=(Math.exp(-48*u*u)-e12)/(1-e12);}
+  const order=2*nForm;
+  const F=[0,1,2,3].map(()=>new Float32Array(T));
+  const en=new Float64Array(T), fr=new Float64Array(winLen);
+  let maxE=0;
+  const load=(t)=>{
+    const s0=Math.round(t*step*sr)-(winLen>>1); let e=0;
+    for(let i=0;i<winLen;i++){const idx=s0+i; const v=(idx>=0&&idx<n)?y[idx]*w[i]:0; fr[i]=v; e+=v*v;}
+    return e;
+  };
+  for(let t=0;t<T;t++){en[t]=load(t); if(en[t]>maxE) maxE=en[t];}
+  for(let t=0;t<T;t++){
+    if(en[t]<=0||en[t]<maxE*1e-4) continue;             // 最大から40 dB以上小さい区間は無視
+    load(t);
+    const a=burg(fr,order);
+    const rt=polyRoots(a), fs=[];
+    for(let k=0;k<order;k++){
+      if(!(rt.zi[k]>1e-6)) continue;
+      const mag=Math.hypot(rt.zr[k],rt.zi[k]);
+      const f=Math.atan2(rt.zi[k],rt.zr[k])*sr/(2*Math.PI);
+      const bw=mag<1?-Math.log(mag)*sr/Math.PI:0;
+      if(f>50&&f<sr/2-50&&bw<800&&isFinite(f)) fs.push(f);
+    }
+    fs.sort((p,q)=>p-q);
+    for(let j=0;j<4&&j<fs.length;j++) F[j][t]=fs[j];
+  }
+  return {step,T,F,sr,order};
+}
+
+/* ---------- TextGrid ---------- */
+function decodeText(buf){
+  const u=new Uint8Array(buf);
+  if(u[0]===0xFE&&u[1]===0xFF) return new TextDecoder('utf-16be').decode(u.subarray(2));
+  if(u[0]===0xFF&&u[1]===0xFE) return new TextDecoder('utf-16le').decode(u.subarray(2));
+  if(u[0]===0xEF&&u[1]===0xBB&&u[2]===0xBF) return new TextDecoder('utf-8').decode(u.subarray(3));
+  if(u.length>3&&u[0]!==0&&u[1]===0&&u[3]===0) return new TextDecoder('utf-16le').decode(u);
+  if(u.length>3&&u[0]===0&&u[1]!==0&&u[2]===0) return new TextDecoder('utf-16be').decode(u);
+  try{return new TextDecoder('utf-8',{fatal:true}).decode(u);}catch(e){}
+  try{return new TextDecoder('shift_jis').decode(u);}catch(e){}
+  return new TextDecoder('utf-8').decode(u);
+}
+function parseTextGrid(text){
+  text=text.replace(/^\uFEFF/,'');
+  if(!/TextGrid/.test(text.slice(0,200))) throw new Error('TextGridファイルではないようです');
+  return /^\s*xmin\s*=/m.test(text)?parseTGLong(text):parseTGShort(text);
+}
+function parseTGLong(text){
+  const lines=text.replace(/\r\n?/g,'\n').split('\n'), pairs=[];
+  for(let i=0;i<lines.length;i++){
+    let m=lines[i].match(/^\s*(?:intervals|points):\s*size\s*=\s*([-+\d.eE]+)/);
+    if(m){pairs.push(['size',m[1]]);continue;}
+    m=lines[i].match(/^\s*([A-Za-z][A-Za-z ?]*?)\s*=\s*(.*)$/);
+    if(!m) continue;
+    const key=m[1].trim(); let val=m[2];
+    if(val.trim().startsWith('"')){
+      let acc=val.trim();
+      const open=s=>((s.match(/"/g)||[]).length%2)===1;
+      while(open(acc)&&i+1<lines.length){i++;acc+='\n'+lines[i];}
+      acc=acc.trim();
+      pairs.push([key,acc.slice(1,-1).replace(/""/g,'"')]);
+    } else pairs.push([key,val.trim()]);
+  }
+  let p=0;
+  const take=(...keys)=>{
+    if(p>=pairs.length||!keys.includes(pairs[p][0])) throw new Error('TextGridの形式を解釈できません（'+keys[0]+'）');
+    return pairs[p++][1];
+  };
+  while(p<pairs.length&&pairs[p][0]!=='xmin') p++;
+  const xmin=parseFloat(take('xmin')), xmax=parseFloat(take('xmax')), nt=parseInt(take('size'),10);
+  const tiers=[];
+  for(let i=0;i<nt;i++){
+    while(p<pairs.length&&pairs[p][0]!=='class') p++;
+    const cls=take('class'), name=take('name'), a=parseFloat(take('xmin')), b=parseFloat(take('xmax')), n=parseInt(take('size'),10);
+    const items=[];
+    if(/Interval/i.test(cls)){
+      for(let k=0;k<n;k++){const s=parseFloat(take('xmin')), e=parseFloat(take('xmax')), tx=take('text'); items.push({a:s,b:e,text:tx});}
+      tiers.push({type:'interval',name,xmin:a,xmax:b,items});
+    } else {
+      for(let k=0;k<n;k++){const t=parseFloat(take('number','time')), tx=take('mark','text'); items.push({t,text:tx});}
+      tiers.push({type:'point',name,xmin:a,xmax:b,items});
+    }
+  }
+  return {xmin,xmax,tiers};
+}
+function parseTGShort(text){
+  const tok=text.replace(/^\s*File type\s*=\s*"[^"]*"/i,'').replace(/^\s*Object class\s*=\s*"[^"]*"/i,'').match(/"(?:[^"]|"")*"|[^\s"]+/g)||[];
+  let p=0;
+  const str=()=>{const t=tok[p++]; if(t===undefined||t[0]!=='"') throw new Error('TextGridの形式を解釈できません'); return t.slice(1,-1).replace(/""/g,'"');};
+  const num=()=>{const v=parseFloat(tok[p++]); if(!isFinite(v)) throw new Error('TextGridの形式を解釈できません'); return v;};
+  if(tok[p]&&/ooTextFile/.test(tok[p])){str();str();}
+  const xmin=num(), xmax=num();
+  if(tok[p]==='<exists>') p++;
+  const nt=num(), tiers=[];
+  for(let i=0;i<nt;i++){
+    const cls=str(), name=str(), a=num(), b=num(), n=num(), items=[];
+    if(/Interval/i.test(cls)){
+      for(let k=0;k<n;k++){const s=num(), e=num(), tx=str(); items.push({a:s,b:e,text:tx});}
+      tiers.push({type:'interval',name,xmin:a,xmax:b,items});
+    } else {
+      for(let k=0;k<n;k++){const t=num(), tx=str(); items.push({t,text:tx});}
+      tiers.push({type:'point',name,xmin:a,xmax:b,items});
+    }
+  }
+  return {xmin,xmax,tiers};
+}
+
+/* ---------- TextGrid 書き出し（Praat 長形式） ---------- */
+function tgToText(tg){
+  const num=v=>String(+Number(v).toPrecision(15));
+  const q=s=>'"'+String(s).replace(/"/g,'""')+'"';
+  const L=['File type = "ooTextFile"','Object class = "TextGrid"','',
+    'xmin = '+num(tg.xmin),'xmax = '+num(tg.xmax),'tiers? <exists>','size = '+tg.tiers.length,'item []:'];
+  tg.tiers.forEach((t,i)=>{
+    L.push('    item ['+(i+1)+']:');
+    if(t.type==='interval'){
+      L.push('        class = "IntervalTier"','        name = '+q(t.name),'        xmin = '+num(t.xmin),'        xmax = '+num(t.xmax),'        intervals: size = '+t.items.length);
+      t.items.forEach((it,k)=>L.push('        intervals ['+(k+1)+']:','            xmin = '+num(it.a),'            xmax = '+num(it.b),'            text = '+q(it.text)));
+    } else {
+      L.push('        class = "TextTier"','        name = '+q(t.name),'        xmin = '+num(t.xmin),'        xmax = '+num(t.xmax),'        points: size = '+t.items.length);
+      t.items.forEach((it,k)=>L.push('        points ['+(k+1)+']:','            number = '+num(it.t),'            mark = '+q(it.text)));
+    }
+  });
+  return L.join('\n')+'\n';
+}
+
+/* ---------- WAV 入出力 ---------- */
+function parseWav(buf){
+  if(buf.byteLength<44) return null;
+  const dv=new DataView(buf);
+  const tag=o=>String.fromCharCode(dv.getUint8(o),dv.getUint8(o+1),dv.getUint8(o+2),dv.getUint8(o+3));
+  if(tag(0)!=='RIFF'||tag(8)!=='WAVE') return null;
+  let p=12, fmt=null, dataOff=-1, dataLen=0;
+  while(p+8<=buf.byteLength){
+    const id=tag(p), len=dv.getUint32(p+4,true);
+    if(id==='fmt '){
+      fmt={tag:dv.getUint16(p+8,true),ch:dv.getUint16(p+10,true),sr:dv.getUint32(p+12,true),bits:dv.getUint16(p+22,true)};
+      if(fmt.tag===0xFFFE&&len>=26) fmt.tag=dv.getUint16(p+32,true);
+    } else if(id==='data'){ dataOff=p+8; dataLen=Math.min(len,buf.byteLength-dataOff); break; }
+    p+=8+len+(len&1);
+  }
+  if(!fmt||dataOff<0||fmt.ch<1) return null;
+  const okInt=fmt.tag===1&&[8,16,24,32].includes(fmt.bits), okFlt=fmt.tag===3&&[32,64].includes(fmt.bits);
+  if(!okInt&&!okFlt) return null;
+  const bps=fmt.bits/8, frames=Math.floor(dataLen/(bps*fmt.ch)), x=new Float32Array(frames);
+  for(let i=0;i<frames;i++){
+    let s=0;
+    for(let c=0;c<fmt.ch;c++){
+      const o=dataOff+(i*fmt.ch+c)*bps; let v;
+      if(fmt.tag===3) v=bps===4?dv.getFloat32(o,true):dv.getFloat64(o,true);
+      else if(bps===1) v=(dv.getUint8(o)-128)/128;
+      else if(bps===2) v=dv.getInt16(o,true)/32768;
+      else if(bps===3){let q=dv.getUint8(o)|(dv.getUint8(o+1)<<8)|(dv.getUint8(o+2)<<16); if(q&0x800000)q-=0x1000000; v=q/8388608;}
+      else v=dv.getInt32(o,true)/2147483648;
+      s+=v;
+    }
+    x[i]=s/fmt.ch;
+  }
+  return {x,sr:fmt.sr};
+}
+function encodeWav(x, sr){
+  const n=x.length, buf=new ArrayBuffer(44+n*2), dv=new DataView(buf);
+  const ws=(o,s)=>{for(let i=0;i<s.length;i++) dv.setUint8(o+i,s.charCodeAt(i));};
+  ws(0,'RIFF'); dv.setUint32(4,36+n*2,true); ws(8,'WAVE'); ws(12,'fmt ');
+  dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,1,true);
+  dv.setUint32(24,sr,true); dv.setUint32(28,sr*2,true); dv.setUint16(32,2,true); dv.setUint16(34,16,true);
+  ws(36,'data'); dv.setUint32(40,n*2,true);
+  for(let i=0;i<n;i++){let v=Math.max(-1,Math.min(1,x[i])); dv.setInt16(44+i*2,v<0?v*32768:v*32767,true);}
+  return buf;
+}
+</script>
+
+<!-- ============================================================
+     UI
+     ============================================================ -->
+<script id="ui">
+(function(){
+'use strict';
+
+const FONT='"Yu Gothic UI","Meiryo UI","Segoe UI","Noto Sans JP",sans-serif';
+const FONT_TG='"Doulos SIL","Charis SIL","Gentium Plus","Segoe UI","Yu Gothic UI","Meiryo UI","Noto Sans JP",sans-serif';
+const LM=64, RM=16, TG_ROW=32;
+const COL_F=['#e6194b','#f5a300','#1fa84a','#2b6cff'];
+const $=id=>document.getElementById(id);
+let dpr=window.devicePixelRatio||1;
+
+const S={
+  sr:0,x:null,dur:0,peak:1,name:'',
+  view:{t0:0,t1:1},sel:null,cursor:null,hover:null,
+  x16:null,sr16:16000,spec:null,pitch:null,form:null,tg:null,
+  abuf:null,ac:null,play:null,rec:null,job:0,
+  tgEdit:false,tgTier:0,tgSelB:null,tgDirty:false,undo:[],status:'',
+  opt:{band:'wide',fmax:5000,range:60,f0lo:75,f0hi:500,fc:5500,nf:5,showF:true,showP:true,voiced:true,lines:'all'}
+};
+
+/* ---------- パネル ---------- */
+const P={};
+document.querySelectorAll('.panel').forEach(el=>{
+  const base=el.querySelector('.base'), over=el.querySelector('.over');
+  P[el.dataset.kind]={kind:el.dataset.kind,el,base,over,g:base.getContext('2d'),og:over?over.getContext('2d'):null,w:0,h:0};
+});
+const visible=p=>p.el.style.display!=='none';
+
+function layout(){
+  dpr=window.devicePixelRatio||1;
+  P.pitch.el.style.display=S.opt.showP?'':'none';
+  if(S.tg){P.tg.el.style.display='block';P.tg.el.style.height=(S.tg.tiers.length*TG_ROW)+'px';}
+  else P.tg.el.style.display='none';
+  for(const k in P){
+    const p=P[k]; if(!visible(p)) continue;
+    const r=p.el.getBoundingClientRect(); p.w=r.width; p.h=r.height;
+    for(const c of [p.base,p.over]) if(c){c.width=Math.max(1,Math.round(p.w*dpr));c.height=Math.max(1,Math.round(p.h*dpr));}
+  }
+}
+
+/* ---------- 座標 ---------- */
+const plotW=p=>p.w-LM-RM;
+const tx=(p,t)=>LM+(t-S.view.t0)/(S.view.t1-S.view.t0)*plotW(p);
+const xt=(p,x)=>S.view.t0+(x-LM)/plotW(p)*(S.view.t1-S.view.t0);
+const clampT=t=>Math.max(0,Math.min(S.dur,t));
+
+function niceStep(span,count){
+  const raw=span/Math.max(1,count), pw=Math.pow(10,Math.floor(Math.log10(raw))), f=raw/pw;
+  return (f<1.5?1:f<3.5?2:f<7.5?5:10)*pw;
+}
+function timeTicks(p){
+  const span=S.view.t1-S.view.t0, step=niceStep(span,plotW(p)/90);
+  const dec=Math.max(0,Math.ceil(-Math.log10(step)-1e-9));
+  const out=[]; for(let v=Math.ceil(S.view.t0/step)*step;v<=S.view.t1+1e-9;v+=step) out.push({v:+v.toFixed(9),dec});
+  return out;
+}
+
+/* ---------- 補助 ---------- */
+function pitchAt(t){
+  const pt=S.pitch; if(!pt) return 0;
+  const i=Math.round(t/pt.step); return (i>=0&&i<pt.T)?pt.f0[i]:0;
+}
+function formVisible(i){
+  if(!S.opt.voiced||!S.pitch) return true;
+  return pitchAt(i*S.form.step)>0;
+}
+function formantAt(t){
+  const F=S.form; if(!F) return null;
+  const i=Math.round(t/F.step); if(i<0||i>=F.T||!formVisible(i)) return [0,0,0,0];
+  return [F.F[0][i],F.F[1][i],F.F[2][i],F.F[3][i]];
+}
+function tierLabelAt(tier,t){
+  if(tier.type==='interval'){for(const it of tier.items) if(t>=it.a&&t<it.b) return it.text; return '';}
+  return '';
+}
+function fmtHz(v){return v>0?Math.round(v)+' Hz':'–';}
+
+/* ---------- 描画：共通 ---------- */
+function begin(p){
+  const g=p.g; g.setTransform(dpr,0,0,dpr,0,0);
+  g.fillStyle='#fff'; g.fillRect(0,0,p.w,p.h); return g;
+}
+function centerMsg(g,p,msg){
+  g.fillStyle='#98a2b3'; g.font='13px '+FONT; g.textAlign='center'; g.textBaseline='middle';
+  g.fillText(msg,LM+plotW(p)/2,p.h/2);
+}
+function leftLabel(g,p,txt){
+  g.fillStyle='#667085'; g.font='11.5px '+FONT; g.textAlign='left'; g.textBaseline='top';
+  g.fillText(txt,6,5);
+}
+function timeGrid(g,p){
+  g.strokeStyle='#eceff3'; g.lineWidth=1; g.beginPath();
+  for(const t of timeTicks(p)){const x=Math.round(tx(p,t.v))+0.5; g.moveTo(x,0); g.lineTo(x,p.h);}
+  g.stroke();
+}
+function boundaryTimes(){
+  if(!S.tg||S.opt.lines==='off') return [];
+  const only=S.opt.lines==='all'?null:parseInt(S.opt.lines,10);
+  const set=new Set(), out=[];
+  S.tg.tiers.forEach((tier,r)=>{
+    if(tier.type!=='interval'||(only!==null&&r!==only)) return;
+    for(const it of tier.items) for(const t of [it.a,it.b]){
+      if(t<=S.tg.xmin+1e-9||t>=S.tg.xmax-1e-9) continue;
+      const k=Math.round(t*1e6); if(!set.has(k)){set.add(k);out.push(t);}
+    }
+  });
+  return out;
+}
+function drawBoundaries(g,p){
+  const ts=boundaryTimes(); if(!ts.length) return;
+  g.save(); g.beginPath(); g.rect(LM,0,plotW(p),p.h); g.clip();
+  g.strokeStyle='rgba(204,32,140,.6)'; g.lineWidth=1; g.beginPath();
+  for(const t of ts){ if(t<S.view.t0||t>S.view.t1) continue; const x=Math.round(tx(p,t))+0.5; g.moveTo(x,0); g.lineTo(x,p.h); }
+  g.stroke(); g.restore();
+}
+
+/* ---------- 描画：波形 ---------- */
+function drawWave(p){
+  const g=begin(p), W=plotW(p), H=p.h, mid=H/2;
+  timeGrid(g,p);
+  g.strokeStyle='#d5dae1'; g.beginPath(); g.moveTo(LM,mid+.5); g.lineTo(p.w-RM,mid+.5); g.stroke();
+  leftLabel(g,p,'波形');
+  if(!S.x){centerMsg(g,p,'音声がありません');return;}
+  const x=S.x, sr=S.sr, sc=(H/2-5)/S.peak, t0=S.view.t0, t1=S.view.t1;
+  g.save(); g.beginPath(); g.rect(LM,0,W,H); g.clip();
+  g.strokeStyle='#1e3a8a'; g.lineWidth=1;
+  const spp=(t1-t0)*sr/W;
+  g.beginPath();
+  if(spp<=1.5){
+    const i0=Math.max(0,Math.floor(t0*sr)-1), i1=Math.min(x.length-1,Math.ceil(t1*sr)+1);
+    for(let i=i0;i<=i1;i++){const X=LM+(i/sr-t0)/(t1-t0)*W, Y=mid-x[i]*sc; if(i===i0)g.moveTo(X,Y); else g.lineTo(X,Y);}
+  } else {
+    for(let px=0;px<W;px++){
+      const a=Math.floor((t0+px/W*(t1-t0))*sr), b=Math.min(x.length,Math.floor((t0+(px+1)/W*(t1-t0))*sr)+1);
+      if(b<=0||a>=x.length) continue;
+      let mn=Infinity,mx=-Infinity;
+      for(let i=Math.max(0,a);i<b;i++){const v=x[i]; if(v<mn)mn=v; if(v>mx)mx=v;}
+      if(mn===Infinity) continue;
+      let y0=mid-mx*sc, y1=mid-mn*sc; if(y1-y0<1){y0-=.5;y1+=.5;}
+      g.moveTo(LM+px+.5,y0); g.lineTo(LM+px+.5,y1);
+    }
+  }
+  g.stroke(); g.restore();
+  drawBoundaries(g,p);
+}
+
+/* ---------- 描画：スペクトログラム ---------- */
+function buildSpecImage(sp,range){
+  const cv=document.createElement('canvas'); cv.width=sp.N; cv.height=sp.nb;
+  const g=cv.getContext('2d'), img=g.createImageData(sp.N,sp.nb), d=img.data;
+  const lo=sp.max-range, inv=1/range;
+  for(let i=0;i<sp.N;i++){
+    const off=i*sp.nb;
+    for(let k=0;k<sp.nb;k++){
+      let v=(sp.db[off+k]-lo)*inv; v=v<0?0:v>1?1:v;
+      const c=255-Math.round(v*255), q=((sp.nb-1-k)*sp.N+i)*4;
+      d[q]=d[q+1]=d[q+2]=c; d[q+3]=255;
+    }
+  }
+  g.putImageData(img,0,0); return cv;
+}
+function drawSpec(p){
+  const g=begin(p), W=plotW(p), H=p.h;
+  if(!S.spec){centerMsg(g,p,S.x?'解析中…':'音声がありません'); leftLabel(g,p,'スペクトログラム'); return;}
+  const sp=S.spec, fmax=Math.min(S.opt.fmax,sp.sr/2), t0=S.view.t0, t1=S.view.t1;
+  if(!sp.img||sp.imgRange!==S.opt.range){sp.img=buildSpecImage(sp,S.opt.range);sp.imgRange=S.opt.range;}
+  const fr=fmax*sp.nfft/sp.sr, sy=sp.nb-1-fr, sh=fr+1;
+  const sw=(t1-t0)/sp.hop, sx=t0/sp.hop+0.5, sx0=Math.max(0,sx), sx1=Math.min(sp.N,sx+sw);
+  if(sx1>sx0){
+    const dx=LM+(sx0-sx)/sw*W, dw=(sx1-sx0)/sw*W;
+    g.imageSmoothingEnabled=true; g.drawImage(sp.img,sx0,sy,sx1-sx0,sh,dx,0,dw,H);
+  }
+  // 周波数軸
+  const fstep=niceStep(fmax,H/46);
+  g.strokeStyle='#98a2b3'; g.fillStyle='#475467'; g.font='11px '+FONT; g.textAlign='right'; g.textBaseline='middle'; g.lineWidth=1;
+  for(let f=0;f<=fmax+1e-6;f+=fstep){
+    const y=Math.max(7,Math.min(H-7,H*(1-f/fmax)));
+    g.beginPath(); g.moveTo(LM-4,Math.round(H*(1-f/fmax))+.5); g.lineTo(LM,Math.round(H*(1-f/fmax))+.5); g.stroke();
+    g.fillText(Math.round(f),LM-7,y);
+  }
+  g.textAlign='left'; g.textBaseline='top'; g.fillText('Hz',6,5);
+  // フォルマント
+  if(S.opt.showF&&S.form){
+    const F=S.form, i0=Math.max(0,Math.floor(t0/F.step)-1), i1=Math.min(F.T-1,Math.ceil(t1/F.step)+1);
+    const pxPer=F.step/(t1-t0)*W, r=Math.max(1.6,Math.min(3.6,pxPer*.45+1.2));
+    g.save(); g.beginPath(); g.rect(LM,0,W,H); g.clip();
+    g.strokeStyle='rgba(255,255,255,.9)'; g.lineWidth=.8;
+    for(let j=0;j<4;j++){
+      g.fillStyle=COL_F[j];
+      for(let i=i0;i<=i1;i++){
+        const f=F.F[j][i]; if(!(f>0)||f>fmax||!formVisible(i)) continue;
+        const X=tx(p,i*F.step), Y=H*(1-f/fmax);
+        g.beginPath(); g.arc(X,Y,r,0,6.2832); g.fill(); g.stroke();
+      }
+    }
+    g.restore();
+    // 凡例
+    g.fillStyle='rgba(255,255,255,.85)'; g.fillRect(LM+6,6,140,18);
+    g.font='bold 11.5px '+FONT; g.textBaseline='middle'; g.textAlign='left';
+    for(let j=0;j<4;j++){g.fillStyle=COL_F[j]; g.beginPath(); g.arc(LM+16+j*34,15,4,0,6.2832); g.fill(); g.fillStyle='#344054'; g.fillText('F'+(j+1),LM+23+j*34,15.5);}
+  }
+  drawBoundaries(g,p);
+}
+
+/* ---------- 描画：ピッチ ---------- */
+function pitchRange(){
+  const pt=S.pitch; if(!pt||pt.lo==null) return {lo:S.opt.f0lo,hi:S.opt.f0hi};
+  let lo=Math.max(0,Math.floor(pt.lo*.85/10)*10), hi=Math.ceil(pt.hi*1.15/10)*10;
+  if(hi-lo<60){const m=(hi+lo)/2; lo=Math.max(0,Math.floor((m-30)/10)*10); hi=lo+60;}
+  return {lo,hi};
+}
+function drawPitch(p){
+  const g=begin(p), W=plotW(p), H=p.h;
+  timeGrid(g,p); leftLabel(g,p,'ピッチ (Hz)');
+  if(!S.pitch){centerMsg(g,p,S.x?'解析中…':'音声がありません');return;}
+  const pt=S.pitch, rg=pitchRange(), yOf=f=>H-8-(f-rg.lo)/(rg.hi-rg.lo)*(H-18);
+  const fs=niceStep(rg.hi-rg.lo,H/32);
+  g.font='11px '+FONT; g.textAlign='right'; g.textBaseline='middle'; g.lineWidth=1;
+  for(let f=Math.ceil(rg.lo/fs)*fs;f<=rg.hi+1e-6;f+=fs){
+    const y=Math.round(yOf(f))+.5;
+    g.strokeStyle='#eceff3'; g.beginPath(); g.moveTo(LM,y); g.lineTo(p.w-RM,y); g.stroke();
+    g.fillStyle='#475467'; g.fillText(Math.round(f),LM-7,y);
+  }
+  if(pt.lo==null){centerMsg(g,p,'有声音が検出されませんでした');}
+  const t0=S.view.t0,t1=S.view.t1, i0=Math.max(0,Math.floor(t0/pt.step)-1), i1=Math.min(pt.T-1,Math.ceil(t1/pt.step)+1);
+  g.save(); g.beginPath(); g.rect(LM,0,W,H); g.clip();
+  g.fillStyle='#1d4ed8';
+  const pxPer=pt.step/(t1-t0)*W, rad=Math.max(1.3,Math.min(2.6,pxPer*.5+.8));
+  for(let i=i0;i<=i1;i++){const f=pt.f0[i]; if(f>0){g.beginPath(); g.arc(tx(p,i*pt.step),yOf(f),rad,0,6.2832); g.fill();}}
+  g.restore();
+  drawBoundaries(g,p);
+}
+
+/* ---------- 描画：TextGrid ---------- */
+function drawTG(p){
+  if(!visible(p)) return;
+  const g=begin(p), W=plotW(p), tg=S.tg; if(!tg) return;
+  const t0=S.view.t0,t1=S.view.t1;
+  tg.tiers.forEach((tier,r)=>{
+    const y0=r*TG_ROW, act=(r===S.tgTier);
+    g.fillStyle=act?'#eef3ff':(r%2?'#f8f9fb':'#fff'); g.fillRect(0,y0,p.w,TG_ROW);
+    if(act){g.fillStyle='#2457d6'; g.fillRect(0,y0,3,TG_ROW);}
+    g.strokeStyle='#cfd4dc'; g.lineWidth=1; g.beginPath(); g.moveTo(0,y0+TG_ROW-.5); g.lineTo(p.w,y0+TG_ROW-.5); g.stroke();
+    g.save(); g.beginPath(); g.rect(0,y0,LM-6,TG_ROW); g.clip();
+    g.fillStyle=act?'#1d3f9e':'#475467'; g.font=(act?'bold ':'')+'12px '+FONT; g.textAlign='right'; g.textBaseline='middle';
+    g.fillText(tier.name||('層'+(r+1)),LM-8,y0+TG_ROW/2); g.restore();
+    g.save(); g.beginPath(); g.rect(LM,y0,W,TG_ROW); g.clip();
+    g.font='15px '+FONT_TG; g.textBaseline='middle';
+    if(tier.type==='interval'){
+      for(const it of tier.items){
+        if(it.b<t0||it.a>t1) continue;
+        const xa=tx(p,it.a), xb=tx(p,it.b);
+        g.strokeStyle='#3b4252'; g.lineWidth=1; g.beginPath();
+        g.moveTo(Math.round(xa)+.5,y0); g.lineTo(Math.round(xa)+.5,y0+TG_ROW);
+        g.moveTo(Math.round(xb)+.5,y0); g.lineTo(Math.round(xb)+.5,y0+TG_ROW); g.stroke();
+        if(it.text&&xb-xa>8){
+          const va=Math.max(xa,LM)+2, vb=Math.min(xb,LM+W)-2;
+          if(vb>va){
+            g.save(); g.beginPath(); g.rect(va,y0,vb-va,TG_ROW); g.clip();
+            g.fillStyle='#111827'; g.textAlign='center'; g.fillText(it.text,(va+vb)/2,y0+TG_ROW/2+1); g.restore();
+          }
+        }
+      }
+    } else {
+      for(const it of tier.items){
+        if(it.t<t0||it.t>t1) continue;
+        const x=tx(p,it.t);
+        g.strokeStyle='#b42318'; g.lineWidth=1.2; g.beginPath(); g.moveTo(Math.round(x)+.5,y0+2); g.lineTo(Math.round(x)+.5,y0+TG_ROW-2); g.stroke();
+        g.fillStyle='#111827'; g.textAlign='left'; g.fillText(it.text,x+4,y0+TG_ROW/2+1);
+      }
+    }
+    const sb=S.tgSelB;
+    if(sb&&sb.r===r){
+      const it=tier.items[sb.i];
+      if(it){
+        const x=tx(p,tier.type==='interval'?it.a:it.t);
+        g.strokeStyle='#d92d20'; g.lineWidth=2.4; g.beginPath(); g.moveTo(Math.round(x)+.5,y0); g.lineTo(Math.round(x)+.5,y0+TG_ROW); g.stroke();
+      }
+    }
+    g.restore();
+  });
+}
+
+/* ---------- 描画：時間軸 ---------- */
+function drawAxis(p){
+  const g=begin(p);
+  g.strokeStyle='#98a2b3'; g.fillStyle='#475467'; g.font='11px '+FONT; g.textAlign='center'; g.textBaseline='top'; g.lineWidth=1;
+  g.beginPath(); g.moveTo(LM,.5); g.lineTo(p.w-RM,.5); g.stroke();
+  if(!S.x) return;
+  for(const t of timeTicks(p)){
+    const x=Math.round(tx(p,t.v))+.5;
+    g.beginPath(); g.moveTo(x,0); g.lineTo(x,5); g.stroke();
+    g.fillText(t.v.toFixed(t.dec),x,8);
+  }
+  g.textAlign='right'; g.fillText('時間 (s)',LM-6,8);
+}
+
+/* ---------- 描画：オーバーレイ ---------- */
+function drawOver(p){
+  const g=p.og; if(!g) return;
+  g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,p.w,p.h);
+  if(!S.x) return;
+  const x0=LM, x1=p.w-RM;
+  if(S.sel){
+    const a=Math.max(x0,tx(p,S.sel.a)), b=Math.min(x1,tx(p,S.sel.b));
+    if(b>a){
+      g.fillStyle='rgba(36,87,214,.15)'; g.fillRect(a,0,b-a,p.h);
+      g.strokeStyle='rgba(36,87,214,.8)'; g.lineWidth=1; g.beginPath();
+      if(tx(p,S.sel.a)>=x0){g.moveTo(Math.round(a)+.5,0);g.lineTo(Math.round(a)+.5,p.h);}
+      if(tx(p,S.sel.b)<=x1){g.moveTo(Math.round(b)+.5,0);g.lineTo(Math.round(b)+.5,p.h);}
+      g.stroke();
+    }
+  }
+  if(S.cursor!=null){
+    const x=tx(p,S.cursor);
+    if(x>=x0&&x<=x1){g.strokeStyle='rgba(17,24,39,.75)'; g.lineWidth=1; g.beginPath(); g.moveTo(Math.round(x)+.5,0); g.lineTo(Math.round(x)+.5,p.h); g.stroke();}
+  }
+  if(S.hover&&S.hover.t!=null){
+    const x=tx(p,S.hover.t);
+    if(x>=x0&&x<=x1){
+      g.save(); g.setLineDash([4,3]); g.strokeStyle='rgba(55,65,81,.75)'; g.lineWidth=1;
+      g.beginPath(); g.moveTo(Math.round(x)+.5,0); g.lineTo(Math.round(x)+.5,p.h); g.stroke(); g.restore();
+    }
+    if(p.kind==='spec'&&S.hover.f!=null&&S.hover.panel==='spec'){
+      const y=Math.round(p.h*(1-S.hover.f/Math.min(S.opt.fmax,S.spec?S.spec.sr/2:S.opt.fmax)))+.5;
+      g.save(); g.setLineDash([4,3]); g.strokeStyle='rgba(55,65,81,.6)'; g.beginPath(); g.moveTo(x0,y); g.lineTo(x1,y); g.stroke(); g.restore();
+    }
+  }
+  if(S.play){
+    const t=S.play.a+(S.ac.currentTime-S.play.t0), x=tx(p,t);
+    if(x>=x0&&x<=x1){g.strokeStyle='#d92d20'; g.lineWidth=1.5; g.beginPath(); g.moveTo(Math.round(x)+.5,0); g.lineTo(Math.round(x)+.5,p.h); g.stroke();}
+  }
+}
+
+/* ---------- 描画スケジューラ ---------- */
+let needBase=false, needOver=false, rafId=0;
+function requestDraw(base){
+  if(base!==false) needBase=true; needOver=true;
+  if(!rafId) rafId=requestAnimationFrame(()=>{
+    rafId=0;
+    if($('viewA').hidden){needBase=needOver=false;return;}
+    if(needBase){
+      if(visible(P.wave)) drawWave(P.wave);
+      if(visible(P.spec)) drawSpec(P.spec);
+      if(visible(P.pitch)) drawPitch(P.pitch);
+      if(visible(P.tg)) drawTG(P.tg);
+      drawAxis(P.axis); syncPan();
+    }
+    if(needOver) for(const k in P) if(visible(P[k])) drawOver(P[k]);
+    needBase=needOver=false;
+  });
+}
+
+/* ---------- 表示範囲 ---------- */
+function setView(t0,t1){
+  const minW=Math.min(0.02,S.dur||1);
+  let w=Math.max(minW,Math.min(S.dur,t1-t0));
+  t0=Math.max(0,Math.min(S.dur-w,t0));
+  S.view={t0,t1:t0+w}; updateButtons(); requestDraw();
+}
+function zoomAt(tc,f){
+  const w=S.view.t1-S.view.t0, nw=Math.max(Math.min(0.02,S.dur),Math.min(S.dur,w*f));
+  const fr=(tc-S.view.t0)/w; setView(tc-fr*nw,tc-fr*nw+nw);
+}
+const pan=$('pan');
+function syncPan(){
+  const w=S.view.t1-S.view.t0, full=S.dur-w;
+  pan.disabled=!(S.x&&full>1e-6);
+  pan.value=full>1e-6?Math.round(S.view.t0/full*1000):0;
+}
+pan.addEventListener('input',()=>{
+  const w=S.view.t1-S.view.t0, full=S.dur-w, t0=pan.value/1000*full;
+  S.view={t0,t1:t0+w}; requestDraw();
+});
+
+/* ---------- 読み取り表示 ---------- */
+function updateReadout(){
+  const main=$('roMain'), selEl=$('roSel');
+  if(!S.x){main.innerHTML='<span id="status">'+(S.status||'')+'</span>';selEl.textContent='';return;}
+  const h=S.hover, t=(h&&h.t!=null)?h.t:S.cursor;
+  const parts=[];
+  if(S.status) parts.push('<span id="status">'+S.status+'</span>');
+  if(t!=null){
+    parts.push('<span><span class="k">時刻</span>'+t.toFixed(3)+' s</span>');
+    if(h&&h.f!=null&&h.panel==='spec') parts.push('<span><span class="k">周波数</span>'+Math.round(h.f)+' Hz</span>');
+    parts.push('<span><span class="k">F0</span>'+fmtHz(pitchAt(t))+'</span>');
+    const fm=formantAt(t);
+    for(let j=0;j<4;j++) parts.push('<span><span class="k" style="color:'+COL_F[j]+';font-weight:700">F'+(j+1)+'</span>'+(fm?fmtHz(fm[j]):'–')+'</span>');
+    if(S.tg) S.tg.tiers.forEach(tier=>{ if(tier.type==='interval'){const s=tierLabelAt(tier,t); if(s) parts.push('<span><span class="k">'+esc(tier.name||'層')+'</span>'+esc(s)+'</span>');} });
+  } else parts.push('<span class="k">波形やスペクトログラムをクリック / ドラッグすると値を読み取れます</span>');
+  main.innerHTML=parts.join('');
+  selEl.innerHTML=S.sel?selSummary():'';
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function selSummary(){
+  const {a,b}=S.sel, parts=['<span><span class="k">選択</span>'+a.toFixed(3)+' – '+b.toFixed(3)+' s（'+((b-a)*1000).toFixed(0)+' ms）</span>'];
+  if(S.pitch){
+    const pt=S.pitch, v=[];
+    for(let i=Math.ceil(a/pt.step);i<=Math.floor(b/pt.step)&&i<pt.T;i++) if(pt.f0[i]>0) v.push(pt.f0[i]);
+    parts.push('<span><span class="k">F0 中央値</span>'+(v.length?Math.round(median(v))+' Hz':'–')+'</span>');
+  }
+  if(S.form){
+    const F=S.form;
+    for(let j=0;j<4;j++){
+      const v=[];
+      for(let i=Math.ceil(a/F.step);i<=Math.floor(b/F.step)&&i<F.T;i++) if(F.F[j][i]>0&&formVisible(i)) v.push(F.F[j][i]);
+      parts.push('<span><span class="k">F'+(j+1)+' 中央値</span>'+(v.length?Math.round(median(v))+' Hz':'–')+'</span>');
+    }
+  }
+  return parts.join('');
+}
+function setStatus(s){S.status=s||'';updateReadout();}
+
+/* ---------- ポインタ操作 ---------- */
+let drag=null, bdrag=null;
+function bindPanel(p){
+  const el=p.over; if(!el) return;
+  const posOf=e=>{const r=el.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top};};
+  el.addEventListener('pointerdown',e=>{
+    if(!S.x||e.button!==0) return;
+    el.setPointerCapture(e.pointerId);
+    const pos=posOf(e);
+    if(p.kind==='tg'&&S.tg){
+      const r=Math.floor(pos.y/TG_ROW);
+      if(r>=0&&r<S.tg.tiers.length) S.tgTier=r;
+      if(S.tgEdit){
+        const hb=hitBoundary(r,pos.x);
+        S.tgSelB=hb;
+        if(hb){bdrag={hb,moved:false}; requestDraw(); return;}
+      }
+      requestDraw();
+    }
+    drag={p,x0:pos.x,t:clampT(xt(p,pos.x)),moved:false};
+  });
+  el.addEventListener('pointermove',e=>{
+    if(!S.x) return;
+    if(bdrag){moveBoundary(clampT(xt(p,posOf(e).x))); return;}
+    if(p.kind==='tg'&&S.tg){const pp=posOf(e); el.style.cursor=(S.tgEdit&&hitBoundary(Math.floor(pp.y/TG_ROW),pp.x))?'ew-resize':'crosshair';}
+    const pos=posOf(e), t=clampT(xt(p,pos.x));
+    let f=null;
+    if(p.kind==='spec'&&S.spec) f=Math.max(0,Math.min(1,1-pos.y/p.h))*Math.min(S.opt.fmax,S.spec.sr/2);
+    S.hover={t:(pos.x>=LM&&pos.x<=p.w-RM)?t:null,f,panel:p.kind};
+    if(drag&&drag.p===p){
+      if(!drag.moved&&Math.abs(pos.x-drag.x0)>3) drag.moved=true;
+      if(drag.moved){const a=drag.t, b=t; S.sel={a:Math.min(a,b),b:Math.max(a,b)}; S.cursor=null; updateButtons();}
+    }
+    updateReadout(); requestDraw(false);
+  });
+  el.addEventListener('pointerup',e=>{
+    if(bdrag){bdrag=null; requestDraw(); return;}
+    if(drag&&drag.p===p&&!drag.moved){
+      const t=drag.t;
+      if(p.kind==='tg'){
+        const pos=posOf(e), r=Math.floor(pos.y/TG_ROW), tier=S.tg&&S.tg.tiers[r];
+        const it=tier&&tier.type==='interval'&&tier.items.find(q=>t>=q.a&&t<q.b);
+        if(it){S.sel={a:it.a,b:it.b};S.cursor=S.tgEdit?t:null;} else {S.cursor=t;S.sel=null;}
+      } else {S.cursor=t;S.sel=null;}
+      updateButtons();
+    }
+    drag=null; updateReadout(); requestDraw(false);
+  });
+  el.addEventListener('pointerleave',()=>{S.hover=null;updateReadout();requestDraw(false);});
+  if(p.kind==='tg') el.addEventListener('dblclick',e=>{
+    if(!S.tg||!S.tgEdit) return;
+    const pos=posOf(e), r=Math.floor(pos.y/TG_ROW), tier=S.tg.tiers[r]; if(!tier) return;
+    if(pos.x<LM){renameTier(r);return;}
+    const t=xt(p,pos.x); let k=-1;
+    if(tier.type==='interval') k=tier.items.findIndex(it=>t>=it.a&&t<it.b);
+    else {let bd=9; tier.items.forEach((it,i)=>{const d=Math.abs(tx(p,it.t)-pos.x); if(d<bd){bd=d;k=i;}});}
+    if(k>=0) showLabelEditor(r,k);
+  });
+  el.addEventListener('wheel',e=>{
+    if(!S.x) return; e.preventDefault();
+    const pos=posOf(e);
+    if(e.shiftKey||Math.abs(e.deltaX)>Math.abs(e.deltaY)){
+      const w=S.view.t1-S.view.t0, d=(e.deltaX||e.deltaY)/Math.max(1,plotW(p))*w;
+      setView(S.view.t0+d,S.view.t1+d);
+    } else zoomAt(clampT(xt(p,Math.max(LM,pos.x))),e.deltaY>0?1.25:0.8);
+  },{passive:false});
+}
+for(const k in P) bindPanel(P[k]);
+
+/* ---------- ボタン状態 ---------- */
+function updateButtons(){
+  const has=!!S.x;
+  $('btnPlay').disabled=!has||!!S.rec; $('btnStop').disabled=!S.play;
+  $('btnSave').disabled=!has; $('zSel').disabled=!S.sel;
+  $('btnToVowel').disabled=!S.sel||!S.form;
+  updateTGButtons();
+}
+
+/* ---------- 再生 ---------- */
+function ensureCtx(){
+  if(!S.ac) S.ac=new (window.AudioContext||window.webkitAudioContext)();
+  if(S.ac.state==='suspended') S.ac.resume();
+  return S.ac;
+}
+function startPlay(ra,rb){
+  if(!S.x||S.rec) return; stopPlay();
+  const ac=ensureCtx();
+  if(!S.abuf){S.abuf=ac.createBuffer(1,S.x.length,S.sr); S.abuf.copyToChannel(S.x,0);}
+  let a,b;
+  if(ra!=null&&rb!=null){a=ra;b=rb;} else if(S.sel){a=S.sel.a;b=S.sel.b;} else {a=S.cursor!=null?S.cursor:S.view.t0; b=S.view.t1;}
+  if(b-a<0.005) return;
+  const src=ac.createBufferSource(); src.buffer=S.abuf; src.connect(ac.destination);
+  const state={src,a,b,t0:ac.currentTime+0.02};
+  src.onended=()=>{ if(S.play===state){S.play=null;updateButtons();requestDraw(false);} };
+  src.start(ac.currentTime+0.02,a,b-a);
+  S.play=state; updateButtons(); animate();
+}
+function stopPlay(){
+  if(!S.play) return;
+  const st=S.play; S.play=null;
+  try{st.src.onended=null;st.src.stop();}catch(e){}
+  updateButtons(); requestDraw(false);
+}
+function animate(){
+  if(!S.play) return;
+  if(S.ac.currentTime-S.play.t0>=S.play.b-S.play.a+0.05){stopPlay();return;}
+  requestDraw(false); requestAnimationFrame(animate);
+}
+
+/* ---------- 録音 ---------- */
+const WORKLET=`class R extends AudioWorkletProcessor{
+constructor(){super();this.b=new Float32Array(2048);this.n=0;
+this.port.onmessage=()=>{if(this.n){this.port.postMessage(this.b.slice(0,this.n));this.n=0;}this.port.postMessage('done');};}
+process(inputs){const c=inputs[0]&&inputs[0][0];
+if(c){for(let i=0;i<c.length;i++){this.b[this.n++]=c[i];if(this.n===2048){this.port.postMessage(this.b.slice(0));this.n=0;}}}
+return true;}}
+registerProcessor('rec-proc',R);`;
+
+async function startRec(){
+  if(S.rec) return;
+  stopPlay();
+  let stream;
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+  }catch(e){
+    setStatus('マイクを使えませんでした（'+(e&&e.name?e.name:'エラー')+'）。ブラウザのマイク許可を確認してください。');
+    return;
+  }
+  const ac=ensureCtx(), src=ac.createMediaStreamSource(stream), mute=ac.createGain(); mute.gain.value=0; mute.connect(ac.destination);
+  const rec={stream,src,mute,chunks:[],n:0,start:performance.now(),peak:0,node:null,mode:''};
+  const onChunk=c=>{
+    rec.chunks.push(c); rec.n+=c.length;
+    let pk=0; for(let i=0;i<c.length;i++){const v=Math.abs(c[i]); if(v>pk)pk=v;}
+    rec.peak=pk;
+  };
+  try{
+    const url=URL.createObjectURL(new Blob([WORKLET],{type:'application/javascript'}));
+    await ac.audioWorklet.addModule(url); URL.revokeObjectURL(url);
+    const node=new AudioWorkletNode(ac,'rec-proc',{numberOfInputs:1,numberOfOutputs:1,channelCount:1});
+    node.port.onmessage=e=>{ if(e.data==='done'){ if(rec.onDone) rec.onDone(); } else onChunk(e.data); };
+    src.connect(node); node.connect(mute); rec.node=node; rec.mode='worklet';
+  }catch(e){
+    const node=ac.createScriptProcessor(4096,1,1);
+    node.onaudioprocess=ev=>onChunk(new Float32Array(ev.inputBuffer.getChannelData(0)));
+    src.connect(node); node.connect(mute); rec.node=node; rec.mode='script';
+  }
+  S.rec=rec; rec.sr=ac.sampleRate;
+  $('btnRec').textContent='■ 録音停止'; $('btnRec').classList.add('on'); $('recInfo').hidden=false;
+  updateButtons(); setStatus('録音中…');
+  const tick=()=>{
+    if(S.rec!==rec) return;
+    const sec=rec.n/rec.sr; $('recTime').textContent=Math.floor(sec/60)+':'+String(Math.floor(sec%60)).padStart(2,'0');
+    const lv=$('lvl'); lv.style.width=Math.max(0,Math.min(100,(20*Math.log10(rec.peak+1e-6)+60)/60*100))+'%'; lv.classList.toggle('clip',rec.peak>=0.99);
+    if(sec>=300){stopRec();return;}
+    requestAnimationFrame(tick);
+  };
+  tick();
+}
+function stopRec(){
+  const rec=S.rec; if(!rec) return;
+  const finish=()=>{
+    if(S.rec!==rec) return; S.rec=null;
+    try{rec.src.disconnect();rec.node.disconnect();rec.mute.disconnect();}catch(e){}
+    rec.stream.getTracks().forEach(t=>t.stop());
+    $('btnRec').textContent='● 録音'; $('btnRec').classList.remove('on'); $('recInfo').hidden=true;
+    const x=new Float32Array(rec.n); let o=0; for(const c of rec.chunks){x.set(c,o);o+=c.length;}
+    setStatus('');
+    if(x.length<rec.sr*0.05){setStatus('録音が短すぎます。'); updateButtons(); return;}
+    const d=new Date(), pad=n=>String(n).padStart(2,'0');
+    setSound(x,rec.sr,'rec-'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'-'+pad(d.getHours())+pad(d.getMinutes())+pad(d.getSeconds()));
+  };
+  if(rec.mode==='worklet'){ rec.onDone=finish; rec.node.port.postMessage('flush'); setTimeout(finish,400); }
+  else finish();
+}
+$('btnRec').addEventListener('click',()=>{S.rec?stopRec():startRec();});
+
+/* ---------- 音声の読み込み ---------- */
+async function loadAudioFile(file){
+  try{
+    setStatus('読み込み中…');
+    const buf=await file.arrayBuffer();
+    let w=parseWav(buf);
+    if(!w){
+      const ac=ensureCtx(), ab=await ac.decodeAudioData(buf.slice(0));
+      const n=ab.length, x=new Float32Array(n);
+      for(let c=0;c<ab.numberOfChannels;c++){const d=ab.getChannelData(c); for(let i=0;i<n;i++) x[i]+=d[i]/ab.numberOfChannels;}
+      w={x,sr:ab.sampleRate};
+    }
+    setSound(w.x,w.sr,file.name);
+  }catch(e){
+    setStatus('音声を読み込めませんでした：'+(e&&e.message?e.message:e));
+  }
+}
+$('fileAudio').addEventListener('change',e=>{const f=e.target.files[0]; if(f) loadAudioFile(f); e.target.value='';});
+
+/* ---------- TextGrid の読み込み ---------- */
+async function loadTGFile(file){
+  try{
+    const tg=parseTextGrid(decodeText(await file.arrayBuffer()));
+    if(S.tg&&S.tgDirty&&!confirm('編集中のTextGridを破棄して、読み込んだものに置き換えます。よろしいですか？')) return;
+    closeEditor(false);
+    S.tg=tg; S.undo=[]; S.tgDirty=false; S.tgTier=0; S.tgSelB=null;
+    rebuildLinesSelect(); rebuildVTier(); updateTGButtons();
+    layout(); requestDraw();
+    let msg='TextGrid「'+file.name+'」を読み込みました（'+tg.tiers.length+'層）。';
+    if(S.x&&Math.abs(tg.xmax-S.dur)>0.05) msg+=' ※TextGridの長さ（'+tg.xmax.toFixed(2)+' s）が音声（'+S.dur.toFixed(2)+' s）と異なります。';
+    if(!S.x) msg+=' 音声も開いてください。';
+    setStatus(msg);
+  }catch(e){ setStatus('TextGridを読み込めませんでした：'+(e&&e.message?e.message:e)); }
+}
+$('fileTG').addEventListener('change',e=>{const f=e.target.files[0]; if(f) loadTGFile(f); e.target.value='';});
+
+/* ---------- 音声のセット・解析 ---------- */
+function setSound(x,sr,name){
+  stopPlay();
+  S.x=x; S.sr=sr; S.dur=x.length/sr; S.name=name; S.abuf=null;
+  let pk=0; for(let i=0;i<x.length;i++){const v=Math.abs(x[i]); if(v>pk)pk=v;}
+  S.peak=pk>1e-6?pk:1e-6;
+  S.view={t0:0,t1:S.dur}; S.sel=null; S.cursor=null; S.hover=null;
+  S.spec=S.pitch=S.form=null; S.x16=null;
+  $('fileInfo').textContent=name+'　'+S.dur.toFixed(2)+' 秒　'+sr+' Hz'+(pk>=0.99?'　⚠ 音が割れている可能性があります':'');
+  updateButtons(); layout(); requestDraw(); analyzeAll();
+}
+function later(fn){return new Promise(r=>setTimeout(()=>{r(fn());},16));}
+async function analyzeAll(){
+  const job=++S.job;
+  setStatus('解析中…');
+  await later(()=>{S.x16=S.sr>16000?resample(S.x,S.sr,16000):S.x; S.sr16=Math.min(S.sr,16000);});
+  if(job!==S.job) return;
+  await doSpec(job); if(job!==S.job) return;
+  await doPitch(job); if(job!==S.job) return;
+  await doForm(job); if(job!==S.job) return;
+  setStatus('');
+}
+async function doSpec(job){
+  await later(()=>{
+    const win=S.opt.band==='wide'?0.005:0.030, hop=Math.max(0.002,S.dur/6000);
+    S.spec=computeSpectrogram(S.x16,S.sr16,win,hop);
+  });
+  if(job===S.job) requestDraw();
+}
+async function doPitch(job){
+  await later(()=>{
+    const step=S.dur>30?0.01:0.005;
+    S.pitch=computePitch(S.x16,S.sr16,S.opt.f0lo,S.opt.f0hi,step);
+  });
+  if(job===S.job){requestDraw();updateReadout();}
+}
+async function doForm(job){
+  await later(()=>{
+    const step=S.dur>30?0.01:0.005;
+    S.form=computeFormants(S.x,S.sr,S.opt.fc,S.opt.nf,step);
+  });
+  if(job===S.job){requestDraw();updateReadout();updateButtons();}
+}
+let timers={};
+function schedule(kind,fn){
+  clearTimeout(timers[kind]);
+  timers[kind]=setTimeout(async()=>{
+    if(!S.x||!S.x16) return;
+    const job=++S.job; setStatus('再解析中…');
+    await fn(job); if(job===S.job) setStatus('');
+  },300);
+}
+
+/* ---------- 設定 ---------- */
+$('optBand').addEventListener('change',e=>{S.opt.band=e.target.value;S.spec=null;requestDraw();schedule('spec',doSpec);});
+$('optFmax').addEventListener('change',e=>{S.opt.fmax=+e.target.value;requestDraw();});
+$('optRange').addEventListener('input',e=>{S.opt.range=+e.target.value;$('optRangeV').textContent=S.opt.range+' dB';requestDraw();});
+const SPK={std:[75,500,5500],m:[70,300,5000],f:[100,500,5500],c:[150,600,7000]};
+function applyPitchOpts(){
+  const lo=+$('optF0lo').value, hi=+$('optF0hi').value;
+  if(!(lo>=30&&hi>lo+20)) return;
+  S.opt.f0lo=lo; S.opt.f0hi=hi; schedule('pitch',async job=>{await doPitch(job);});
+}
+function applyFormOpts(){
+  const fc=+$('optFc').value; if(!(fc>=3000&&fc<=9000)) return;
+  S.opt.fc=fc; S.opt.nf=+$('optNf').value; schedule('form',async job=>{await doForm(job);});
+}
+$('optSpk').addEventListener('change',e=>{
+  const v=SPK[e.target.value]; $('optF0lo').value=v[0]; $('optF0hi').value=v[1]; $('optFc').value=v[2];
+  S.opt.f0lo=v[0]; S.opt.f0hi=v[1]; S.opt.fc=v[2]; S.opt.nf=+$('optNf').value;
+  schedule('all',async job=>{await doPitch(job);await doForm(job);});
+});
+$('optF0lo').addEventListener('input',applyPitchOpts);
+$('optF0hi').addEventListener('input',applyPitchOpts);
+$('optFc').addEventListener('input',applyFormOpts);
+$('optNf').addEventListener('change',applyFormOpts);
+$('optShowF').addEventListener('change',e=>{S.opt.showF=e.target.checked;requestDraw();});
+$('optVoiced').addEventListener('change',e=>{S.opt.voiced=e.target.checked;requestDraw();updateReadout();});
+$('optShowP').addEventListener('change',e=>{S.opt.showP=e.target.checked;layout();requestDraw();});
+$('optLines').addEventListener('change',e=>{S.opt.lines=e.target.value;requestDraw();});
+
+/* ---------- ボタン ---------- */
+$('btnPlay').addEventListener('click',()=>startPlay());
+$('btnStop').addEventListener('click',stopPlay);
+$('zIn').addEventListener('click',()=>{if(S.x) zoomAt((S.view.t0+S.view.t1)/2,0.5);});
+$('zOut').addEventListener('click',()=>{if(S.x) zoomAt((S.view.t0+S.view.t1)/2,2);});
+$('zAll').addEventListener('click',()=>{if(S.x) setView(0,S.dur);});
+$('zSel').addEventListener('click',()=>{if(S.sel) setView(S.sel.a,S.sel.b);});
+$('btnSave').addEventListener('click',()=>{
+  if(!S.x) return;
+  const blob=new Blob([encodeWav(S.x,S.sr)],{type:'audio/wav'}), a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=(S.name||'recording').replace(/\.[^.]+$/,'')+'.wav';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+});
+window.addEventListener('keydown',e=>{
+  const tag=(e.target&&e.target.tagName)||''; if(/INPUT|SELECT|TEXTAREA/.test(tag)&&e.key!=='Escape') return;
+  if(e.key===' '){e.preventDefault(); S.play?stopPlay():startPlay();}
+  else if(e.key==='Enter'){if(S.tgEdit&&S.tg&&!$('viewA').hidden){e.preventDefault(); addBoundary();}}
+  else if(e.key==='Delete'||e.key==='Backspace'){if(S.tgEdit&&S.tgSelB&&!$('viewA').hidden){e.preventDefault(); deleteSelBoundary();}}
+  else if(e.key==='F2'){if(S.tgEdit&&S.tg&&!$('viewA').hidden){e.preventDefault(); editAtCursor();}}
+  else if((e.ctrlKey||e.metaKey)&&(e.key==='z'||e.key==='Z')){e.preventDefault(); tgUndo();}
+  else if(e.key==='Home'){if(S.x) setView(0,S.dur);}
+  else if(e.key==='Escape'){S.sel=null;S.cursor=null;updateButtons();updateReadout();requestDraw(false);}
+  else if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
+    if(!S.x) return; const w=S.view.t1-S.view.t0, d=(e.key==='ArrowLeft'?-1:1)*w*0.2; setView(S.view.t0+d,S.view.t1+d);
+  }
+  else if(e.key==='+'||e.key==='='){if(S.x) zoomAt((S.view.t0+S.view.t1)/2,0.5);}
+  else if(e.key==='-'){if(S.x) zoomAt((S.view.t0+S.view.t1)/2,2);}
+});
+
+/* ---------- ドラッグ＆ドロップ ---------- */
+const drop=$('drop'); let dragDepth=0;
+window.addEventListener('dragenter',e=>{e.preventDefault();dragDepth++;drop.classList.add('on');});
+window.addEventListener('dragleave',e=>{e.preventDefault();if(--dragDepth<=0){dragDepth=0;drop.classList.remove('on');}});
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('drop',e=>{
+  e.preventDefault(); dragDepth=0; drop.classList.remove('on');
+  for(const f of e.dataTransfer.files){
+    if(/\.(textgrid|txt)$/i.test(f.name)) loadTGFile(f); else loadAudioFile(f);
+  }
+});
+
+
+/* ============================================================
+   TextGrid 編集
+   ============================================================ */
+function note(m){setStatus(m);$('vMsg').textContent=m||'';}
+function downloadBlob(data,name,type){
+  const blob=new Blob([data],{type}), a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+function rebuildLinesSelect(){
+  const sel=$('optLines'), keep=S.opt.lines;
+  sel.innerHTML='<option value="all">全層</option><option value="off">なし</option>';
+  if(S.tg) S.tg.tiers.forEach((t,i)=>{ if(t.type==='interval'){const o=document.createElement('option'); o.value=String(i); o.textContent=(i+1)+'：'+(t.name||'層'); sel.appendChild(o);} });
+  sel.value=keep; if(sel.value!==keep){sel.value='all';S.opt.lines='all';}
+}
+function updateTGButtons(){
+  const has=!!S.tg, ed=has&&S.tgEdit;
+  ['tgAddB','tgDelB','tgAddI','tgAddP','tgDelTier'].forEach(id=>{$(id).disabled=!ed;});
+  $('tgUndo').disabled=!ed||!S.undo.length;
+  $('tgDelB').disabled=!ed||!S.tgSelB;
+  $('tgSave').disabled=!has; $('tgNew').disabled=!S.x; $('tgEdit').disabled=!has;
+  $('tgHint').textContent=ed?'層をクリックで選択 → 位置をクリック → Enter で境界追加 ／ ダブルクリックでラベル編集（Tabで次の区間）／ 境界はドラッグで移動、クリック→Deleteで削除':'';
+}
+function tgSnapshot(){S.undo.push(JSON.stringify(S.tg)); if(S.undo.length>60) S.undo.shift();}
+function tgChanged(structural){
+  S.tgDirty=true;
+  if(structural){layout(); rebuildLinesSelect(); rebuildVTier();}
+  updateTGButtons(); requestDraw();
+}
+function tgUndo(){
+  if(!S.tg||!S.undo.length) return;
+  closeEditor(false);
+  S.tg=JSON.parse(S.undo.pop()); S.tgSelB=null;
+  if(S.tgTier>=S.tg.tiers.length) S.tgTier=S.tg.tiers.length-1;
+  tgChanged(true);
+}
+function hitBoundary(r,x){
+  const tier=S.tg&&S.tg.tiers[r]; if(!tier) return null;
+  const p=P.tg; let best=null, bd=6;
+  if(tier.type==='interval'){
+    for(let i=1;i<tier.items.length;i++){const d=Math.abs(tx(p,tier.items[i].a)-x); if(d<bd){bd=d;best={r,i};}}
+  } else {
+    for(let i=0;i<tier.items.length;i++){const d=Math.abs(tx(p,tier.items[i].t)-x); if(d<bd){bd=d;best={r,i};}}
+  }
+  return best;
+}
+function moveBoundary(t){
+  const {r,i}=bdrag.hb, tier=S.tg.tiers[r], eps=0.001;
+  if(!bdrag.moved){tgSnapshot(); bdrag.moved=true; S.tgDirty=true; updateTGButtons();}
+  if(tier.type==='interval'){
+    const L=tier.items[i-1], R=tier.items[i];
+    t=Math.max(L.a+eps,Math.min(R.b-eps,t)); L.b=t; R.a=t;
+  } else {
+    const lo=i>0?tier.items[i-1].t+eps:tier.xmin, hi=i<tier.items.length-1?tier.items[i+1].t-eps:tier.xmax;
+    tier.items[i].t=Math.max(lo,Math.min(hi,t));
+  }
+  requestDraw();
+}
+function addBoundary(){
+  if(!S.tg){note('先にTextGridを作成するか読み込んでください');return;}
+  if(S.cursor==null){note('境界を入れる位置をクリックして、カーソルを置いてください');return;}
+  const tier=S.tg.tiers[S.tgTier], t=S.cursor; if(!tier) return;
+  if(t<=tier.xmin||t>=tier.xmax) return;
+  closeEditor(true);
+  if(tier.type==='interval'){
+    const k=tier.items.findIndex(it=>t>it.a&&t<it.b); if(k<0) return;
+    const it=tier.items[k]; if(t-it.a<1e-3||it.b-t<1e-3) return;
+    tgSnapshot();
+    tier.items.splice(k,1,{a:it.a,b:t,text:it.text},{a:t,b:it.b,text:''});
+  } else {
+    if(tier.items.some(q=>Math.abs(q.t-t)<1e-3)) return;
+    tgSnapshot();
+    tier.items.push({t,text:''}); tier.items.sort((a,b)=>a.t-b.t);
+  }
+  tgChanged(false);
+}
+function deleteSelBoundary(){
+  const sb=S.tgSelB; if(!sb||!S.tg) return;
+  const tier=S.tg.tiers[sb.r]; if(!tier) return;
+  closeEditor(true); tgSnapshot();
+  if(tier.type==='interval'){
+    const L=tier.items[sb.i-1], R=tier.items[sb.i];
+    if(!L||!R){S.undo.pop();return;}
+    tier.items.splice(sb.i-1,2,{a:L.a,b:R.b,text:L.text+R.text});
+  } else tier.items.splice(sb.i,1);
+  S.tgSelB=null; tgChanged(false);
+}
+function addTier(type){
+  if(!S.tg) return; closeEditor(true);
+  const name=prompt((type==='interval'?'区間層':'点層')+'の名前','層'+(S.tg.tiers.length+1)); if(name===null) return;
+  tgSnapshot();
+  S.tg.tiers.push({type,name,xmin:S.tg.xmin,xmax:S.tg.xmax,items:type==='interval'?[{a:S.tg.xmin,b:S.tg.xmax,text:''}]:[]});
+  S.tgTier=S.tg.tiers.length-1; tgChanged(true);
+}
+function delTier(){
+  if(!S.tg) return;
+  if(S.tg.tiers.length<2){note('最後の1層は削除できません');return;}
+  const r=S.tgTier; if(!confirm('層「'+S.tg.tiers[r].name+'」を削除しますか？（Ctrl+Zで元に戻せます）')) return;
+  closeEditor(false); tgSnapshot();
+  S.tg.tiers.splice(r,1); S.tgTier=Math.max(0,r-1); S.tgSelB=null; tgChanged(true);
+}
+function renameTier(r){
+  const tier=S.tg&&S.tg.tiers[r]; if(!tier) return;
+  const name=prompt('層の名前',tier.name); if(name===null||name===tier.name) return;
+  tgSnapshot(); tier.name=name; tgChanged(true);
+}
+
+let editor=null;
+function closeEditor(commit){
+  if(!editor) return;
+  const ed=editor; editor=null;
+  const tier=S.tg&&S.tg.tiers[ed.r], it=tier&&tier.items[ed.k];
+  if(commit&&it&&ed.input.value!==it.text){tgSnapshot(); it.text=ed.input.value; tgChanged(false);}
+  if(ed.input.parentNode) ed.input.remove();
+}
+function showLabelEditor(r,k){
+  closeEditor(true);
+  const tier=S.tg.tiers[r], it=tier&&tier.items[k], p=P.tg; if(!it) return;
+  let xa,xb;
+  if(tier.type==='interval'){xa=tx(p,it.a);xb=tx(p,it.b);} else {xa=tx(p,it.t);xb=xa+140;}
+  xa=Math.max(LM,xa); xb=Math.min(p.w-RM,Math.max(xb,xa+120));
+  if(xb-xa<120) xa=Math.max(LM,xb-120);
+  const input=document.createElement('input');
+  input.type='text'; input.value=it.text;
+  input.style.cssText='position:absolute;z-index:5;box-sizing:border-box;left:'+xa+'px;top:'+(r*TG_ROW+1)+'px;width:'+(xb-xa)+'px;height:'+(TG_ROW-2)+'px;'+
+    'font:15px '+FONT_TG+';padding:0 4px;border:2px solid #2457d6;border-radius:3px;background:#fff;outline:none';
+  P.tg.el.appendChild(input);
+  editor={input,r,k};
+  input.addEventListener('keydown',e=>{
+    if(e.isComposing||e.keyCode===229) return;
+    if(e.key==='Enter'){e.preventDefault();closeEditor(true);}
+    else if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeEditor(false);}
+    else if(e.key==='Tab'){
+      e.preventDefault(); closeEditor(true);
+      const nk=k+(e.shiftKey?-1:1), nx=tier.items[nk];
+      if(nx){
+        const na=tier.type==='interval'?nx.a:nx.t, nb=tier.type==='interval'?nx.b:nx.t, w=S.view.t1-S.view.t0;
+        if(na<S.view.t0||nb>S.view.t1) setView(na-0.1*w,na-0.1*w+w);
+        S.tgTier=r; showLabelEditor(r,nk);
+      }
+    }
+  });
+  input.addEventListener('blur',()=>closeEditor(true));
+  input.focus(); input.select();
+}
+function editAtCursor(){
+  const tier=S.tg&&S.tg.tiers[S.tgTier]; if(!tier) return;
+  const t=S.cursor!=null?S.cursor:(S.sel?(S.sel.a+S.sel.b)/2:null); if(t==null) return;
+  let k=-1;
+  if(tier.type==='interval') k=tier.items.findIndex(it=>t>=it.a&&t<it.b);
+  else {let bd=0.05; tier.items.forEach((it,i)=>{const d=Math.abs(it.t-t); if(d<bd){bd=d;k=i;}});}
+  if(k>=0) showLabelEditor(S.tgTier,k);
+}
+
+$('tgEdit').addEventListener('change',e=>{
+  S.tgEdit=e.target.checked; closeEditor(true); S.tgSelB=null; updateTGButtons(); requestDraw();
+});
+$('tgNew').addEventListener('click',()=>{
+  if(!S.x) return;
+  if(S.tg&&S.tgDirty&&!confirm('編集中のTextGridは破棄されます。新規作成しますか？')) return;
+  const name=prompt('最初の層（区間層）の名前','層1'); if(name===null) return;
+  closeEditor(false);
+  S.tg={xmin:0,xmax:S.dur,tiers:[{type:'interval',name,xmin:0,xmax:S.dur,items:[{a:0,b:S.dur,text:''}]}]};
+  S.undo=[]; S.tgDirty=true; S.tgTier=0; S.tgSelB=null; S.tgEdit=true; $('tgEdit').checked=true;
+  rebuildLinesSelect(); rebuildVTier(); layout(); updateTGButtons(); requestDraw();
+});
+$('tgAddB').addEventListener('click',addBoundary);
+$('tgDelB').addEventListener('click',deleteSelBoundary);
+$('tgAddI').addEventListener('click',()=>addTier('interval'));
+$('tgAddP').addEventListener('click',()=>addTier('point'));
+$('tgDelTier').addEventListener('click',delTier);
+$('tgUndo').addEventListener('click',tgUndo);
+$('tgSave').addEventListener('click',()=>{
+  if(!S.tg) return; closeEditor(true);
+  const name=(S.name||'annotation').replace(/\.[^.]+$/,'')+'.TextGrid';
+  downloadBlob(tgToText(S.tg),name,'text/plain;charset=utf-8');
+  S.tgDirty=false; setStatus('TextGridを保存しました（'+name+'）。Praat形式・UTF-8です。');
+});
+window.addEventListener('beforeunload',e=>{ if(S.tgDirty){e.preventDefault(); e.returnValue='';} });
+
+/* ============================================================
+   母音図（F1–F2）
+   ============================================================ */
+const V={pts:[],hi:null,nextId:1,cmap:new Map(),geom:null};
+const VPAL=['#2563eb','#dc2626','#16a34a','#d97706','#7c3aed','#0891b2','#db2777','#4d7c0f','#475569','#b45309'];
+const vc=$('vCanvas'), vg=vc.getContext('2d'); let vw=0, vh=0;
+function vColor(label){
+  if(!label) return '#6b7280';
+  if(!V.cmap.has(label)) V.cmap.set(label,VPAL[V.cmap.size%VPAL.length]);
+  return V.cmap.get(label);
+}
+function segStats(a,b){
+  const F=S.form; if(!F) return null;
+  const f1=[],f2=[],f3=[];
+  for(let i=Math.max(0,Math.ceil(a/F.step));i<=Math.floor(b/F.step)&&i<F.T;i++){
+    if(!(F.F[0][i]>0&&F.F[1][i]>0)||!formVisible(i)) continue;
+    f1.push(F.F[0][i]); f2.push(F.F[1][i]); if(F.F[2][i]>0) f3.push(F.F[2][i]);
+  }
+  if(f1.length<3) return null;
+  const f0=[], pt=S.pitch;
+  if(pt) for(let i=Math.max(0,Math.ceil(a/pt.step));i<=Math.floor(b/pt.step)&&i<pt.T;i++) if(pt.f0[i]>0) f0.push(pt.f0[i]);
+  return {F:[median(f1),median(f2),f3.length?median(f3):0],f0:f0.length?median(f0):0,n:f1.length};
+}
+function vowelAddSel(){
+  if(!S.sel||!S.form){note('先に分析画面で範囲を選択してください（フォルマントの解析が終わってから）');return;}
+  const {a,b}=S.sel, st=segStats(a,b);
+  if(!st){note('選択範囲で有効なフォルマントが得られませんでした（範囲や「有声部のみ」の設定を確認してください）');return;}
+  let label='';
+  if(S.tg){const tier=S.tg.tiers[S.tgTier]; if(tier&&tier.type==='interval') label=tierLabelAt(tier,(a+b)/2).trim();}
+  V.pts.push({id:V.nextId++,label,F:st.F,f0:st.f0,a,b,sound:S.name});
+  note('母音図に追加しました（'+V.pts.length+'点）'+(label?'：'+label:'。ラベルは母音図の表で入力できます'));
+  refreshVowel();
+}
+function vowelAddTier(){
+  const r=parseInt($('vTier').value,10), tier=S.tg&&S.tg.tiers[r];
+  if(!tier||tier.type!=='interval'){note('TextGridの区間層を選んでください');return;}
+  if(!S.form){note('フォルマントの解析が終わっていません');return;}
+  const mid=$('vMid').checked; let add=0, skip=0;
+  for(const it of tier.items){
+    if(!it.text.trim()) continue;
+    const w=it.b-it.a; if(w<0.03){skip++;continue;}
+    const st=segStats(mid?it.a+w*.25:it.a, mid?it.b-w*.25:it.b);
+    if(!st){skip++;continue;}
+    V.pts.push({id:V.nextId++,label:it.text.trim(),F:st.F,f0:st.f0,a:it.a,b:it.b,sound:S.name}); add++;
+  }
+  note(add+'点を追加しました'+(skip?'（'+skip+'区間は短い、または有効なフォルマントが不足のためスキップ）':''));
+  refreshVowel();
+}
+function rebuildVTier(){
+  const sel=$('vTier'); sel.innerHTML='';
+  if(S.tg) S.tg.tiers.forEach((t,i)=>{ if(t.type==='interval'){const o=document.createElement('option'); o.value=String(i); o.textContent=(i+1)+'：'+(t.name||'層'); sel.appendChild(o);} });
+  if(S.tg&&S.tg.tiers[S.tgTier]&&S.tg.tiers[S.tgTier].type==='interval') sel.value=String(S.tgTier);
+  $('vAddTier').disabled=!sel.options.length;
+}
+function vRange(){
+  let f1lo=200,f1hi=1000,f2lo=500,f2hi=3000;
+  if(V.pts.length){
+    let a1=Infinity,b1=-Infinity,a2=Infinity,b2=-Infinity;
+    for(const p of V.pts){a1=Math.min(a1,p.F[0]);b1=Math.max(b1,p.F[0]);a2=Math.min(a2,p.F[1]);b2=Math.max(b2,p.F[1]);}
+    f1lo=Math.floor((a1-80)/100)*100; f1hi=Math.ceil((b1+80)/100)*100;
+    f2lo=Math.floor((a2-200)/250)*250; f2hi=Math.ceil((b2+200)/250)*250;
+    if(f1hi-f1lo<400){const m=(f1hi+f1lo)/2; f1lo=Math.floor((m-200)/100)*100; f1hi=f1lo+400;}
+    if(f2hi-f2lo<1000){const m=(f2hi+f2lo)/2; f2lo=Math.floor((m-500)/250)*250; f2hi=f2lo+1000;}
+    f1lo=Math.max(0,f1lo); f2lo=Math.max(0,f2lo);
+  }
+  return {f1lo,f1hi,f2lo,f2hi};
+}
+function vResize(){
+  const r=vc.parentElement.getBoundingClientRect(); vw=r.width; vh=r.height;
+  vc.width=Math.max(1,Math.round(vw*dpr)); vc.height=Math.max(1,Math.round(vh*dpr));
+}
+function drawVowel(){
+  if($('viewV').hidden||vw<50||vh<50) return;
+  const g=vg; g.setTransform(dpr,0,0,dpr,0,0); g.fillStyle='#fff'; g.fillRect(0,0,vw,vh);
+  const ml=64, mr=30, mt=48, mb=24, W=vw-ml-mr, H=vh-mt-mb, R=vRange();
+  // F2 は右が小さく、F1 は上が小さい（伝統的な母音図の向き）
+  const xOf=f2=>ml+(R.f2hi-f2)/(R.f2hi-R.f2lo)*W, yOf=f1=>mt+(f1-R.f1lo)/(R.f1hi-R.f1lo)*H;
+  V.geom={xOf,yOf};
+  g.strokeStyle='#e5e7eb'; g.lineWidth=1; g.fillStyle='#475467'; g.font='11.5px '+FONT;
+  g.textAlign='center'; g.textBaseline='bottom';
+  const s2=niceStep(R.f2hi-R.f2lo,W/80);
+  for(let f=Math.ceil(R.f2lo/s2)*s2;f<=R.f2hi+1e-6;f+=s2){
+    const x=Math.round(xOf(f))+.5; g.beginPath(); g.moveTo(x,mt); g.lineTo(x,mt+H); g.stroke(); g.fillText(Math.round(f),x,mt-6);
+  }
+  g.textAlign='right'; g.textBaseline='middle';
+  const s1=niceStep(R.f1hi-R.f1lo,H/50);
+  for(let f=Math.ceil(R.f1lo/s1)*s1;f<=R.f1hi+1e-6;f+=s1){
+    const y=Math.round(yOf(f))+.5; g.beginPath(); g.moveTo(ml,y); g.lineTo(ml+W,y); g.stroke(); g.fillText(Math.round(f),ml-8,y);
+  }
+  g.strokeStyle='#98a2b3'; g.strokeRect(ml+.5,mt+.5,W,H);
+  g.fillStyle='#344054'; g.font='bold 12.5px '+FONT; g.textAlign='center'; g.textBaseline='top'; g.fillText('F2 (Hz)',ml+W/2,6);
+  g.save(); g.translate(14,mt+H/2); g.rotate(-Math.PI/2); g.textBaseline='top'; g.fillText('F1 (Hz)',0,0); g.restore();
+  if(!V.pts.length){
+    g.fillStyle='#98a2b3'; g.font='14px '+FONT; g.textAlign='center'; g.textBaseline='middle';
+    g.fillText('点がありません',ml+W/2,mt+H/2); return;
+  }
+  g.save(); g.beginPath(); g.rect(ml,mt,W,H); g.clip();
+  for(const p of V.pts){
+    const x=xOf(p.F[1]), y=yOf(p.F[0]), col=vColor(p.label), hi=(V.hi===p.id);
+    g.beginPath(); g.arc(x,y,hi?8:6,0,6.2832); g.fillStyle=col; g.globalAlpha=.85; g.fill(); g.globalAlpha=1;
+    g.strokeStyle='#fff'; g.lineWidth=1.5; g.stroke();
+    if(p.label){g.fillStyle=col; g.font='bold 15px '+FONT_TG; g.textAlign='left'; g.textBaseline='bottom'; g.fillText(p.label,x+8,y-4);}
+  }
+  g.restore();
+  const hp=V.pts.find(p=>p.id===V.hi);
+  if(hp){
+    const txt=(hp.label||'(無名)')+'　F1 '+Math.round(hp.F[0])+'　F2 '+Math.round(hp.F[1]);
+    g.font='12.5px '+FONT; const w=g.measureText(txt).width+14;
+    let x=xOf(hp.F[1])+12, y=yOf(hp.F[0])+12; if(x+w>vw-4) x-=w+24; if(y+24>vh-4) y-=40;
+    g.fillStyle='rgba(17,24,39,.9)'; g.fillRect(x,y,w,22); g.fillStyle='#fff'; g.textAlign='left'; g.textBaseline='middle'; g.fillText(txt,x+7,y+11.5);
+  }
+}
+function renderVTable(){
+  const tb=$('vTable').tBodies[0]; tb.innerHTML='';
+  V.pts.forEach(p=>{
+    const tr=document.createElement('tr'); tr.dataset.id=p.id;
+    tr.innerHTML='<td><button class="mini" data-act="play" title="この区間を再生">▶</button></td>'+
+      '<td><input type="text" data-act="label" value="'+esc(p.label)+'"></td>'+
+      '<td>'+Math.round(p.F[0])+'</td><td>'+Math.round(p.F[1])+'</td><td>'+(p.F[2]?Math.round(p.F[2]):'–')+'</td><td>'+(p.f0?Math.round(p.f0):'–')+
+      '</td><td><button class="mini" data-act="del" title="削除">×</button></td>';
+    tb.appendChild(tr);
+  });
+  $('vEmpty').hidden=V.pts.length>0;
+}
+function refreshVowel(){ renderVTable(); drawVowel(); }
+function vPlay(p){
+  if(!p) return;
+  if(!S.x||p.sound!==S.name){note('この点は別の音声から追加されたため再生できません');return;}
+  startPlay(p.a,p.b);
+}
+$('vTable').tBodies[0].addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  const id=+b.closest('tr').dataset.id, p=V.pts.find(q=>q.id===id);
+  if(b.dataset.act==='play') vPlay(p);
+  else if(b.dataset.act==='del'){V.pts=V.pts.filter(q=>q.id!==id); V.hi=null; refreshVowel();}
+});
+$('vTable').tBodies[0].addEventListener('input',e=>{
+  if(e.target.dataset.act!=='label') return;
+  const id=+e.target.closest('tr').dataset.id, p=V.pts.find(q=>q.id===id);
+  if(p){p.label=e.target.value; drawVowel();}
+});
+$('vTable').tBodies[0].addEventListener('mouseover',e=>{
+  const tr=e.target.closest('tr'); const id=tr?+tr.dataset.id:null;
+  if(id!==V.hi){V.hi=id; drawVowel();}
+});
+$('vTable').tBodies[0].addEventListener('mouseleave',()=>{V.hi=null;drawVowel();});
+function vHit(e){
+  if(!V.geom) return null;
+  const r=vc.getBoundingClientRect(), x=e.clientX-r.left, y=e.clientY-r.top; let best=null, bd=13;
+  for(const p of V.pts){const d=Math.hypot(V.geom.xOf(p.F[1])-x,V.geom.yOf(p.F[0])-y); if(d<bd){bd=d;best=p;}}
+  return best;
+}
+vc.addEventListener('pointermove',e=>{const p=vHit(e), id=p?p.id:null; vc.style.cursor=p?'pointer':'default'; if(id!==V.hi){V.hi=id; drawVowel();}});
+vc.addEventListener('pointerleave',()=>{V.hi=null;drawVowel();});
+vc.addEventListener('click',e=>{const p=vHit(e); if(p) vPlay(p);});
+$('vAddSel').addEventListener('click',vowelAddSel);
+$('btnToVowel').addEventListener('click',vowelAddSel);
+$('vAddTier').addEventListener('click',vowelAddTier);
+$('vClear').addEventListener('click',()=>{
+  if(V.pts.length&&!confirm('母音図の点をすべて消しますか？')) return;
+  V.pts=[]; V.hi=null; V.cmap=new Map(); refreshVowel();
+});
+$('vCsv').addEventListener('click',()=>{
+  if(!V.pts.length){note('書き出す点がありません');return;}
+  const q=s=>'"'+String(s).replace(/"/g,'""')+'"';
+  const rows=['label,F1_Hz,F2_Hz,F3_Hz,F0_Hz,start_s,end_s,sound'];
+  for(const p of V.pts) rows.push([q(p.label),Math.round(p.F[0]),Math.round(p.F[1]),p.F[2]?Math.round(p.F[2]):'',p.f0?Math.round(p.f0):'',p.a.toFixed(3),p.b.toFixed(3),q(p.sound)].join(','));
+  downloadBlob('﻿'+rows.join('\r\n')+'\r\n','vowels.csv','text/csv;charset=utf-8');
+});
+
+/* ---------- 画面の切り替え ---------- */
+function showView(v){
+  const A=v==='A';
+  $('viewA').hidden=!A; $('viewV').hidden=A;
+  $('tabA').classList.toggle('on',A); $('tabV').classList.toggle('on',!A);
+  if(A){layout();requestDraw();}
+  else{closeEditor(true); rebuildVTier(); vResize(); refreshVowel();}
+}
+$('tabA').addEventListener('click',()=>showView('A'));
+$('tabV').addEventListener('click',()=>showView('V'));
+if('ResizeObserver' in window) new ResizeObserver(()=>{if(!$('viewV').hidden){vResize();drawVowel();}}).observe(vc.parentElement);
+
+/* ---------- 起動 ---------- */
+if('ResizeObserver' in window) new ResizeObserver(()=>{if($('viewA').hidden) return; layout();requestDraw();}).observe($('stage'));
+window.addEventListener('resize',()=>{layout();requestDraw();});
+layout(); updateButtons(); updateReadout(); requestDraw();
+})();
+</script>
+</body>
+</html>
