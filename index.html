@@ -1195,6 +1195,7 @@ registerProcessor('rec-proc',R);`;
 async function startRec(){
   if(S.rec) return;
   stopPlay();
+  setAudioMode('play-and-record');
   let stream;
   try{
     stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
@@ -1238,6 +1239,7 @@ function stopRec(){
     if(S.rec!==rec) return; S.rec=null;
     try{rec.src.disconnect();rec.node.disconnect();rec.mute.disconnect();}catch(e){}
     rec.stream.getTracks().forEach(t=>t.stop());
+    setAudioMode('playback'); ensureCtx();
     $('btnRec').textContent='● 録音'; $('btnRec').classList.remove('on'); $('recInfo').hidden=true;
     const x=new Float32Array(rec.n); let o=0; for(const c of rec.chunks){x.set(c,o);o+=c.length;}
     setStatus('');
