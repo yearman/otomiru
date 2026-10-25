@@ -165,9 +165,24 @@ button.mini{padding:0 7px;font-size:12px}
     </select>
   </fieldset>
   <fieldset>
-    <legend>ピッチ（YIN法）</legend>
+    <legend>ピッチ</legend>
+    <label>方式
+      <select id="optPM">
+        <option value="yin">YIN法</option>
+        <option value="filtered">Praat：filtered ac</option>
+        <option value="raw">Praat：raw ac</option>
+      </select>
+    </label>
     <label>下限 <input type="number" id="optF0lo" min="30" max="400" step="5" value="75">Hz</label>
     <label>上限 <input type="number" id="optF0hi" min="100" max="1000" step="10" value="500">Hz</label>
+    <span id="pmAdv" hidden>
+      <label title="Praat: Silence threshold。大きいほど小さな音を無声とみなす">無音閾値 <input type="number" id="optSil" min="0" max="0.5" step="0.01" value="0.03"></label>
+      <label title="Praat: Voicing threshold。大きいほど有声と判定されにくい">有声閾値 <input type="number" id="optVoi" min="0.2" max="0.9" step="0.01" value="0.45"></label>
+      <label title="Praat: Octave cost。大きいほど高い候補を優先">オクターブコスト <input type="number" id="optOct" min="0" max="0.5" step="0.005" value="0.01"></label>
+      <label title="Praat: Octave-jump cost。大きいほど急なオクターブ跳躍を嫌う">跳躍コスト <input type="number" id="optJmp" min="0" max="1" step="0.05" value="0.35"></label>
+      <label title="Praat: Voiced/unvoiced cost。大きいほど有声/無声の切り替えを嫌う">有無声コスト <input type="number" id="optVuc" min="0" max="1" step="0.02" value="0.14"></label>
+      <label id="attWrap" title="Praat: Attenuation at top。pitch top（上限）での減衰量">高域減衰 <input type="number" id="optAtt" min="0.001" max="0.5" step="0.005" value="0.03"></label>
+    </span>
   </fieldset>
   <fieldset>
     <legend>フォルマント（LPC・Burg法）</legend>
@@ -252,7 +267,8 @@ button.mini{padding:0 7px;font-size:12px}
     <li><b>TextGridの編集</b>：「新規作成」か読み込み後に「編集モード」をオン。層をクリックして選び、位置をクリックしてカーソルを置き、<kbd>Enter</kbd> で境界を追加します。区間をダブルクリックでラベル入力（<kbd>Tab</kbd> で次の区間へ）、境界はドラッグで移動、クリックして <kbd>Delete</kbd> で削除、<kbd>Ctrl</kbd>+<kbd>Z</kbd> で元に戻せます。「TextGrid保存」でPraat形式（UTF-8）の .TextGrid を書き出します。</li>
     <li><b>母音図</b>：上の「母音図」タブで切り替えます。分析画面で範囲を選んで「母音図へ追加」、またはTextGridの層から一括追加すると、F1–F2 散布図に点が並びます。点をクリックするとその音が再生されます。表はCSVで保存できます。</li>
     <li><b>フォルマントの設定</b>：自動推定は万能ではありません。上限周波数を話者に合わせて変えると結果が変わります（男性 5000 Hz 前後、女性 5500 Hz 前後、子ども 6000〜7000 Hz 前後）。値が不自然なときは、設定を変えて試してみてください。</li>
-    <li><b>Praat との違い</b>：アルゴリズムが異なるため、ピッチ・フォルマントの値は Praat と完全には一致しません。</li>
+    <li><b>ピッチの方式</b>：YIN法（初期設定）のほか、Praat と同じ考え方の自己相関法を選べます。<b>filtered ac</b> は先にローパスフィルタをかけてから自己相関を取る方式で、Praat 6.3 以降で推奨されているものです。<b>raw ac</b> はフィルタなしの従来方式です。方式を変えると、無音閾値などの数値がその方式の Praat 標準値に切り替わります。標準の「下限・上限」は Praat では filtered ac が 50–800 Hz、raw ac が 75–600 Hz ですが、ここでは話者に合わせて自由に変えられます。</li>
+    <li><b>Praat との違い</b>：自己相関のピークの補間など細部の実装が異なるため、ピッチ・フォルマントの値は Praat と完全には一致しません。</li>
     <li><small>推奨ブラウザ：Chrome / Edge の最新版。マイクは https:// のページ、または localhost、または手元のファイルとして開いた場合に使えます。</small></li>
   </ul>
 </details>
@@ -415,6 +431,107 @@ function computePitch(x, sr, f0lo, f0hi, step){
   let lo=Infinity,hi=-Infinity;
   for(let i=0;i<T;i++) if(f1[i]>0){ if(f1[i]<lo)lo=f1[i]; if(f1[i]>hi)hi=f1[i]; }
   return {step,T,f0:f1,lo:isFinite(lo)?lo:null,hi:isFinite(hi)?hi:null};
+}
+
+
+/* ---------- ピッチ（Praat型の自己相関法：raw ac / filtered ac） ----------
+   Boersma (1993) の方法：Hanning窓（3周期分）→ 窓の自己相関で正規化 → 候補（ピーク）列挙
+   → 無声候補の強さ（無音閾値・有声閾値）→ オクターブコスト → Viterbiで最適経路。
+   filtered ac は先に周波数領域のガウス型ローパス（pitch top で att 倍に減衰）をかける。 */
+function computePitchAC(x, sr0, o, step){
+  const floor=o.floor, ceil=o.ceil, maxCand=o.maxCand||15;
+  const sr=Math.min(sr0,Math.max(8000,4*ceil));
+  let y0=sr<sr0?resample(x,sr0,sr):x;
+  const n=y0.length, dur=x.length/sr0, T=Math.max(1,Math.floor(dur/step)+1);
+  const f0=new Float32Array(T);
+  if(n<16) return {step,T,f0,lo:null,hi:null};
+  let mean=0; for(let i=0;i<n;i++) mean+=y0[i]; mean/=n;
+  let y=new Float64Array(n); for(let i=0;i<n;i++) y[i]=y0[i]-mean;
+  if(o.filtered){
+    const N=nextPow2(n+Math.ceil(sr/floor)), re=new Float64Array(N), im=new Float64Array(N);
+    re.set(y); fft(re,im);
+    const la=Math.log(o.att);
+    for(let k=0;k<=N/2;k++){
+      const f=k*sr/N, g=Math.exp(la*(f/ceil)*(f/ceil));
+      re[k]*=g; im[k]*=g; if(k>0&&k<N/2){re[N-k]*=g; im[N-k]*=g;}
+    }
+    for(let k=0;k<N;k++) im[k]=-im[k];
+    fft(re,im);
+    for(let i=0;i<n;i++) y[i]=re[i]/N;
+  }
+  let gpeak=0; for(let i=0;i<n;i++){const v=Math.abs(y[i]); if(v>gpeak) gpeak=v;}
+  if(!(gpeak>0)) return {step,T,f0,lo:null,hi:null};
+
+  const winLen=Math.max(16,Math.round(3/floor*sr)), Nf=nextPow2(2*winLen);
+  const w=new Float64Array(winLen); for(let i=0;i<winLen;i++) w[i]=0.5-0.5*Math.cos(2*Math.PI*(i+0.5)/winLen);
+  const re=new Float64Array(Nf), im=new Float64Array(Nf);
+  // 窓の自己相関
+  re.fill(0); im.fill(0); re.set(w); fft(re,im);
+  for(let k=0;k<Nf;k++){re[k]=re[k]*re[k]+im[k]*im[k]; im[k]=0;}
+  fft(re,im);
+  const rw=new Float64Array(winLen); for(let i=0;i<winLen;i++) rw[i]=re[i]/re[0];
+  const maxLag=Math.min(winLen-2,Math.floor(sr/floor)+2), minLag=Math.max(2,Math.floor(sr/ceil));
+  const corr=0.01/step;
+  const octJump=o.octJump*corr, vuCost=o.vuCost*corr;
+  const fr=new Float64Array(winLen), r=new Float64Array(maxLag+2);
+  const candF=new Array(T), candS=new Array(T);
+  for(let t=0;t<T;t++){
+    const c=Math.round(t*step*sr), s0=c-(winLen>>1);
+    let m=0; for(let i=0;i<winLen;i++){const idx=s0+i; fr[i]=(idx>=0&&idx<n)?y[idx]:0; m+=fr[i];}
+    m/=winLen;
+    let lp=0; for(let i=0;i<winLen;i++){fr[i]-=m; const a=Math.abs(fr[i]); if(a>lp) lp=a;}
+    re.fill(0); im.fill(0);
+    for(let i=0;i<winLen;i++) re[i]=fr[i]*w[i];
+    fft(re,im);
+    for(let k=0;k<Nf;k++){re[k]=re[k]*re[k]+im[k]*im[k]; im[k]=0;}
+    fft(re,im);
+    const r0=re[0];
+    // 無声候補の強さ
+    let us=o.silence<=0?0:2-lp/gpeak/(o.silence/(1+o.voicing)); us=o.voicing+(us>0?us:0);
+    const F=[0], St=[us];
+    if(r0>1e-12){
+      for(let i=0;i<=maxLag+1;i++) r[i]=(re[i]/r0)/Math.max(rw[i],1e-3);
+      const found=[];
+      for(let i=minLag;i<=maxLag;i++){
+        if(r[i]>0.5*o.voicing&&r[i]>r[i-1]&&r[i]>=r[i+1]){
+          const dr=0.5*(r[i+1]-r[i-1]), d2=2*r[i]-r[i-1]-r[i+1];
+          let tau=i, pk=r[i];
+          if(d2>1e-12){const fr_=dr/d2; tau=i+fr_; pk=r[i]+0.5*dr*fr_;}
+          const f=sr/tau; if(f<floor||f>ceil) continue;
+          if(pk>1) pk=1/pk;                         // 1を超えたら折り返す（Praatと同様）
+          found.push([f,pk-o.octCost*Math.log2(floor/f)]);
+        }
+      }
+      found.sort((a,b)=>b[1]-a[1]);
+      for(let k=0;k<found.length&&k<maxCand-1;k++){F.push(found[k][0]); St.push(found[k][1]);}
+    }
+    candF[t]=F; candS[t]=St;
+  }
+  // Viterbi（強さの合計 − 遷移コストの合計 を最大化）
+  const delta=new Array(T), back=new Array(T);
+  delta[0]=candS[0].slice(); back[0]=new Int16Array(candF[0].length);
+  for(let t=1;t<T;t++){
+    const Fp=candF[t-1], Fc=candF[t], dp=delta[t-1], d=new Float64Array(Fc.length), b=new Int16Array(Fc.length);
+    for(let j=0;j<Fc.length;j++){
+      let best=-Infinity, bi=0;
+      for(let i=0;i<Fp.length;i++){
+        let cost;
+        if(Fc[j]===0&&Fp[i]===0) cost=0;
+        else if(Fc[j]===0||Fp[i]===0) cost=vuCost;
+        else cost=octJump*Math.abs(Math.log2(Fp[i]/Fc[j]));
+        const v=dp[i]-cost;
+        if(v>best){best=v;bi=i;}
+      }
+      d[j]=best+candS[t][j]; b[j]=bi;
+    }
+    delta[t]=d; back[t]=b;
+  }
+  let bj=0, bv=-Infinity; const last=delta[T-1];
+  for(let j=0;j<last.length;j++) if(last[j]>bv){bv=last[j];bj=j;}
+  for(let t=T-1;t>=0;t--){ f0[t]=candF[t][bj]; bj=back[t][bj]; }
+  let lo=Infinity,hi=-Infinity;
+  for(let i=0;i<T;i++) if(f0[i]>0){ if(f0[i]<lo)lo=f0[i]; if(f0[i]>hi)hi=f0[i]; }
+  return {step,T,f0,lo:isFinite(lo)?lo:null,hi:isFinite(hi)?hi:null};
 }
 
 /* ---------- LPC（Burg法）とフォルマント ---------- */
@@ -662,7 +779,8 @@ const S={
   x16:null,sr16:16000,spec:null,pitch:null,form:null,tg:null,
   abuf:null,ac:null,play:null,rec:null,job:0,
   tgEdit:false,tgTier:0,tgSelB:null,tgDirty:false,undo:[],status:'',
-  opt:{band:'wide',fmax:5000,range:60,f0lo:75,f0hi:500,fc:5500,nf:5,showF:true,showP:true,voiced:true,lines:'all'}
+  opt:{band:'wide',fmax:5000,range:60,f0lo:75,f0hi:500,fc:5500,nf:5,showF:true,showP:true,voiced:true,lines:'all',
+    pm:'yin',sil:0.03,voi:0.45,oct:0.01,jmp:0.35,vuc:0.14,att:0.03}
 };
 
 /* ---------- パネル ---------- */
@@ -1320,7 +1438,10 @@ async function doSpec(job){
 async function doPitch(job){
   await later(()=>{
     const step=S.dur>30?0.01:0.005;
-    S.pitch=computePitch(S.x16,S.sr16,S.opt.f0lo,S.opt.f0hi,step);
+    const O=S.opt;
+    if(O.pm==='yin') S.pitch=computePitch(S.x16,S.sr16,O.f0lo,O.f0hi,step);
+    else S.pitch=computePitchAC(S.x16,S.sr16,{floor:O.f0lo,ceil:O.f0hi,filtered:O.pm==='filtered',att:O.att,
+      silence:O.sil,voicing:O.voi,octCost:O.oct,octJump:O.jmp,vuCost:O.vuc,maxCand:15},step);
   });
   if(job===S.job){requestDraw();updateReadout();}
 }
@@ -1346,11 +1467,29 @@ $('optBand').addEventListener('change',e=>{S.opt.band=e.target.value;S.spec=null
 $('optFmax').addEventListener('change',e=>{S.opt.fmax=+e.target.value;requestDraw();});
 $('optRange').addEventListener('input',e=>{S.opt.range=+e.target.value;$('optRangeV').textContent=S.opt.range+' dB';requestDraw();});
 const SPK={std:[75,500,5500],m:[70,300,5000],f:[100,500,5500],c:[150,600,7000]};
+const PM_DEF={ // Praat の標準値（無音閾値, 有声閾値, オクターブコスト）
+  filtered:{sil:0.09,voi:0.50,oct:0.055}, raw:{sil:0.03,voi:0.45,oct:0.01}};
+function syncPitchUI(){
+  const pm=S.opt.pm;
+  $('pmAdv').hidden=(pm==='yin'); $('attWrap').hidden=(pm!=='filtered');
+  $('optSil').value=S.opt.sil; $('optVoi').value=S.opt.voi; $('optOct').value=S.opt.oct;
+  $('optJmp').value=S.opt.jmp; $('optVuc').value=S.opt.vuc; $('optAtt').value=S.opt.att;
+}
 function applyPitchOpts(){
   const lo=+$('optF0lo').value, hi=+$('optF0hi').value;
   if(!(lo>=30&&hi>lo+20)) return;
-  S.opt.f0lo=lo; S.opt.f0hi=hi; schedule('pitch',async job=>{await doPitch(job);});
+  S.opt.f0lo=lo; S.opt.f0hi=hi;
+  const num=(id,key,min,max)=>{const v=parseFloat($(id).value); if(isFinite(v)&&v>=min&&v<=max) S.opt[key]=v;};
+  num('optSil','sil',0,0.5); num('optVoi','voi',0.2,0.9); num('optOct','oct',0,0.5);
+  num('optJmp','jmp',0,1); num('optVuc','vuc',0,1); num('optAtt','att',0.001,0.5);
+  schedule('pitch',async job=>{await doPitch(job);});
 }
+$('optPM').addEventListener('change',e=>{
+  S.opt.pm=e.target.value;
+  const d=PM_DEF[S.opt.pm]; if(d){S.opt.sil=d.sil;S.opt.voi=d.voi;S.opt.oct=d.oct;}
+  syncPitchUI(); applyPitchOpts();
+});
+['optSil','optVoi','optOct','optJmp','optVuc','optAtt'].forEach(id=>$(id).addEventListener('input',applyPitchOpts));
 function applyFormOpts(){
   const fc=+$('optFc').value; if(!(fc>=3000&&fc<=9000)) return;
   S.opt.fc=fc; S.opt.nf=+$('optNf').value; schedule('form',async job=>{await doForm(job);});
@@ -1777,6 +1916,7 @@ if('ResizeObserver' in window) new ResizeObserver(()=>{if(!$('viewV').hidden){vR
 /* ---------- 起動 ---------- */
 if('ResizeObserver' in window) new ResizeObserver(()=>{if($('viewA').hidden) return; layout();requestDraw();}).observe($('stage'));
 window.addEventListener('resize',()=>{layout();requestDraw();});
+syncPitchUI();
 layout(); updateButtons(); updateReadout(); requestDraw();
 })();
 </script>
